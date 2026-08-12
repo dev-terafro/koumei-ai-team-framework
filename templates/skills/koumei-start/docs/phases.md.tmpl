@@ -85,6 +85,43 @@ devils-advocate をサブエージェントとして起動する（起動方法�
 
 ---
 
+{{#IF_ROLE inquisitor}}
+## Phase 2.5: 詰問（grilling）
+
+設計に着手する前に、要件・前提・境界条件の曖昧さを inquisitor（諫議大夫）に問い質させる。
+出力は設計案ではなく、**確定事項と未決の前提の一覧（design-brief）**であり、これが Phase 3 の入力になる。
+
+**タスク種別による実施可否**: 軽微修正（クイック）・バグ修正（小）はスキップする（詳細は rules.md）。
+
+### 実行
+
+`{{SKILLS_DIR}}/{{SKILL_PREFIX}}-grill/SKILL.md` の**自動モード（`--auto`）**の手順に従って実行する。
+
+- 問いを立てるのは inquisitor サブエージェント（`model`: TEAM.md の inquisitor のモデル。既定: fable）
+- 回答するのはオーケストレーター（{{COMMANDER_NAME}}）本体
+- **問う者と答える者を分けること。** 同一エージェントの自問自答は禁止する（自分が答えられる問いしか立てなくなるため）
+- 最大 {{GRILLING_MAX_ROUNDS}} ラウンド。詰問役が `詰問完了` を返すか、新たな論点が出なくなった時点で打ち切る
+
+**成果物:** `.agents/inquisitor/deliverables/task-{番号}-design-brief.md`
+
+### エスカレーション
+
+エスカレーション方針は `{{GRILLING_ESCALATE}}`。
+
+- **`high`**: リスク**高**の ASSUMPTION が残る場合のみユーザーに確認を求めて停止する。中・低では停止しない
+- **`none`**: 停止せず、AI判断で確定させて design-brief に「AI判断・要事後確認」と明記して進む
+
+この停止は差し戻しではないため、差し戻しカウンタは加算しない。
+
+**完了後の報告:**
+```
+諫議大夫の詰問が終わり申した。曖昧なる点は出し尽くし、拠り所なき前提も残らず書き留めてござる。
+これより作戦立案に移ろう。両将にはこのブリーフを前提として渡す。
+```
+
+---
+
+{{/IF_ROLE}}
 ## Phase 3: UX設計 + 技術設計（並列実行）
 
 **ux-designer と tech-lead の2つのサブエージェントを並列に起動する（起動方法はCLIに依存）。**
@@ -96,11 +133,23 @@ claude の場合は1つのメッセージ内で2つの Agent tool 呼び出し�
 - `.agents/ux-designer/{{AGENT_INSTRUCTIONS_FILENAME}}` の役割定義
 - `{{SKILLS_DIR}}/{{SKILL_PREFIX}}-design-ux/SKILL.md` の手順セクションの内容
 - 対象タスク番号と指示書のパス
+{{#IF_ROLE inquisitor}}
+- **設計前ブリーフ**（`.agents/inquisitor/deliverables/task-{番号}-design-brief.md`）の内容と、下記の取り扱いルール
+{{/IF_ROLE}}
 
 **サブエージェント2: tech-lead**（`model`: TEAM.md の tech-lead **設計モデル**。既定: fable）
 - `.agents/tech-lead/{{AGENT_INSTRUCTIONS_FILENAME}}` の役割定義
 - `{{SKILLS_DIR}}/{{SKILL_PREFIX}}-design-tech/SKILL.md` の手順セクションの内容
 - 対象タスク番号と指示書のパス
+{{#IF_ROLE inquisitor}}
+- **設計前ブリーフ**（`.agents/inquisitor/deliverables/task-{番号}-design-brief.md`）の内容と、下記の取り扱いルール
+
+**設計前ブリーフの取り扱いルール（両サブエージェントのプロンプトに含める）:**
+- 「確定事項」は決定済みである。設計で蒸し返さず、そのまま前提とすること
+- 「前提（ASSUMPTION）」は根拠なく置かれた仮定である。**前提が誤っていた場合の影響が局所化される設計**にすること（例: 分岐を1箇所に閉じる、スキーマに逃げ道を残す、設定値として外に出す）
+- 設計書には、どの ASSUMPTION に依存した設計判断なのかを明記すること
+- ブリーフに無い論点で新たに曖昧さに突き当たった場合は、黙って決めずに設計書の「未決事項」節に記載すること
+{{/IF_ROLE}}
 
 **両方完了後の報告:**
 ```
@@ -118,6 +167,15 @@ Phase 2 と同様に devils-advocate サブエージェントを起動する。
 - `{{SKILLS_DIR}}/{{SKILL_PREFIX}}-review/SKILL.md` の手順セクションの内容
 - レビュー対象: UX設計 + 技術設計の成果物
 - レビューファイル名: `task-{番号}-design-review.md`
+{{#IF_ROLE inquisitor}}
+- **設計前ブリーフ**（`.agents/inquisitor/deliverables/task-{番号}-design-brief.md`）と、下記の重点観点
+
+**設計前ブリーフに関する重点レビュー観点:**
+- ブリーフの「確定事項」が設計に正しく反映されているか。無視・改変されている決定はないか
+- ブリーフの「前提（ASSUMPTION）」について、**前提が誤っていた場合の影響が局所化される設計**になっているか。リスク高・中の前提が設計全体に染み出していれば Major 以上として指摘する
+- 詰問で拾えなかった論点が設計に残っていないか（設計書の「未決事項」節を確認する）
+- ブリーフの「確定事項」自体が誤っていないか。根拠格付け D（類推）の項目は特に、類推元が本当に同種の事例かを検証する
+{{/IF_ROLE}}
 
 **レビュー結果のVERDICT確認:**
 - **承認（APPROVED）** → Phase 5 へ進む

@@ -13,6 +13,9 @@
 {{#IF_ROLE analyst}}
 | `/{{SKILL_PREFIX}}-analyze [タスクID]` | analyst | 既存コードベースの分析 |
 {{/IF_ROLE}}
+{{#IF_ROLE inquisitor}}
+| `/{{SKILL_PREFIX}}-grill [タスクID] [--auto\|--interactive]` | inquisitor | 設計前の詰問。確定事項と未決の前提を design-brief にまとめる |
+{{/IF_ROLE}}
 {{#IF_ROLE ux-designer}}
 | `/{{SKILL_PREFIX}}-design [タスクID]` | **ux-designer + tech-lead** | UX設計と技術設計を**並列実行** |
 {{/IF_ROLE}}
@@ -39,6 +42,9 @@
 {{#IF_ROLE analyst}}
 | **システム分析担当** | analyst | `.agents/analyst/` | 既存コード・API・DB分析 | {{MODEL_ANALYST}} |
 {{/IF_ROLE}}
+{{#IF_ROLE inquisitor}}
+| **諫議大夫** | inquisitor | `.agents/inquisitor/` | 設計前の詰問・前提の明文化 | **{{MODEL_INQUISITOR}}** |
+{{/IF_ROLE}}
 {{#IF_ROLE ux-designer}}
 | **UXデザイン担当** | ux-designer | `.agents/ux-designer/` | UI設計、画面遷移設計、レスポンシブ対応 | {{MODEL_UX_DESIGNER}} |
 {{/IF_ROLE}}
@@ -55,6 +61,9 @@
 - **配置の原則**: 高単価モデルは「トークン量が多い場所」ではなく「判断のレバレッジが高く出力が小さい場所」に置く
   - **devils-advocate = fable**: レビューVERDICTがフロー全体（差し戻しループ）を制御する品質ゲートであり、誤判定のコストが最も高い
   - **tech-lead 設計 = fable / 実装 = opus**: 設計ミスは実装で増幅される。実装はトークン量が多いため opus（または Codex 委譲）
+{{#IF_ROLE inquisitor}}
+  - **inquisitor = fable**: 「何を問わなかったか」は誰にも検知できない。出力は小さいが、問いの質が下流の設計精度をそのまま決める
+{{/IF_ROLE}}
   - **koumei / analyst / ux-designer = sonnet**: オーケストレーションは機械的、分析は読み取り中心
 
 #### 外部CLIモデル定義

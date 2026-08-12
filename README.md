@@ -4,12 +4,13 @@
 
 上流の [koumei](https://github.com/kuruusuniku/koumei)（MIT）のチームアーキテクチャ（ロール構成・レビュー体制・運用ルール）を、config 駆動の配布エンジン（対話式ウィザード・テンプレート自動展開・更新機構・マルチCLI対応）に載せたフレームワークです。取り込み経緯は `docs/origin-import.md` を参照。
 
-最高指揮者（諸葛孔明）が各専門ロールへ指示を出し、タスク定義 → 分析 → 設計（UX+技術 並列）→ レビュー → 実装 → コードレビューの段階的開発フローを実行します。
+最高指揮者（諸葛孔明）が各専門ロールへ指示を出し、タスク定義 → 分析 → 詰問 → 設計（UX+技術 並列）→ レビュー → 実装 → コードレビューの段階的開発フローを実行します。
 
 ## 特徴
 
 - **対話式セットアップ**: ウィザード形式で設定ファイルを自動生成（技術スタック自動検出付き）
 - **孔明ペルソナのチーム運用**: 最高指揮者=諸葛孔明、レビュアー=悪魔の代弁者（devils-advocate）による品質ゲート
+- **設計前の詰問（grilling）**: 諫議大夫（inquisitor）が設計着手前に前提・境界条件を問い質し、確定事項と未決の前提を明文化。**完全自動でも設計精度を上げる**
 - **レビュアーの独立性**: 自己レビュー禁止を絶対ルールとし、独立エージェント/外部モデルでレビューを実行
 - **フェーズ別モデル配置**: 高単価モデルを「判断のレバレッジが高い所」（設計・レビュー判定）に配置（tech-lead は設計/実装でモデル分割）
 - **レビュー拡張**: `--security`（OWASP+STRIDE監査）/ `--second-opinion`（外部モデル突合）/ `--model`（一時切替）/ タイムアウトフォールバック
@@ -65,6 +66,7 @@ setup.sh --dry-run     # 実際にファイルを作成せずプレビュー
 | ロール | 責務 |
 |--------|------|
 | **analyst** | 既存コードベースの調査・分析。移行や大規模リファクタリングで有用 |
+| **inquisitor** | 諫議大夫。設計前に要件・前提・境界条件を詰問し `design-brief` を作成。設計の手戻りが多いプロジェクトで有用 |
 | **ux-designer** | UI/UX設計。tech-lead と並列で設計を実行 |
 
 ロール構成は `setup.sh --roles` で変更可能。カスタムロール（api-designer / data-engineer / infra-architect）のテンプレートも `.agents/custom-roles/` に展開されます。
@@ -76,19 +78,21 @@ setup.sh --dry-run     # 実際にファイルを作成せずプレビュー
 1. /koumei-request {要件}     → 要件整理・指示書作成（任意）
 2. /koumei-start {要件}       → タスク定義・指示書生成 → 以降を全自動実行
 3. /koumei-analyze             → 既存システム分析（analyst有効時）
-4. /koumei-design              → UX設計 + 技術設計を並列実行
-5. /koumei-review              → 全成果物レビュー
+4. /koumei-grill               → 設計前の詰問（inquisitor有効時）
+5. /koumei-design              → UX設計 + 技術設計を並列実行
+6. /koumei-review              → 全成果物レビュー
    → 差し戻し: /koumei-design-ux or /koumei-design-tech で個別再実行
 
 【実装フェーズ】
-6. /koumei-implement           → 実装（レビュー通過後のみ）
-7. /koumei-review              → コードレビュー（どのタスク種別でも省略しない）
+7. /koumei-implement           → 実装（レビュー通過後のみ）
+8. /koumei-review              → コードレビュー（どのタスク種別でも省略しない）
 
 【検証フェーズ】
-8. /koumei-status              → 進捗確認・次のアクション提案
+9. /koumei-status              → 進捗確認・次のアクション提案
 ```
 
 - `--manual` で手動進行、`--multi` でマルチタスク並列実行（claude限定）
+- `/koumei-grill` は既定で**一問一答**（人が回答）。全自動フローでは `--auto` で起動し、AIが根拠に基づいて自答する
 - タスク種別（軽微修正/バグ修正/機能追加）に応じてフェーズを自動省略（コードレビューは常に実施）
 - 差し戻しはフェーズ別に最大2回、3回目でユーザーにエスカレーション
 
@@ -126,7 +130,8 @@ setup.sh --dry-run     # 実際にファイルを作成せずプレビュー
 │   ├── koumei/                     ← 最高指揮者（tasks/ reports/ requests/）
 │   ├── tech-lead/                  ← instructions/ deliverables/
 │   ├── devils-advocate/            ← instructions/ reviews/
-│   ├── analyst/ ux-designer/       ← オプションロール
+│   ├── analyst/ inquisitor/        ← オプションロール
+│   ├── ux-designer/                ←
 │   ├── task-manager/               ← マルチタスク実行役（claude時）
 │   └── custom-roles/               ← カスタムロールテンプレート
 └── docs-official/                  ← 公式ドキュメント（output.dir で変更可）

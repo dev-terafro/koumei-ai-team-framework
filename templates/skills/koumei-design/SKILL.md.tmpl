@@ -33,6 +33,9 @@ allowed-tools: Read Glob Grep Write Bash Edit Agent
 以下のファイルを読み、サブエージェントに渡すコンテキストを準備する:
 - `.agents/TEAM.md` - チーム構成と規約
 - `.agents/analyst/deliverables/task-{番号}-analysis.md` - 分析結果
+{{#IF_ROLE inquisitor}}
+- `.agents/inquisitor/deliverables/task-{番号}-design-brief.md` - 設計前ブリーフ（確定事項・前提）
+{{/IF_ROLE}}
 - `.agents/ux-designer/instructions/task-{番号}-instruction.md` - UX設計指示書
 - `.agents/tech-lead/instructions/task-{番号}-instruction.md` - 技術設計指示書
 - `.agents/ux-designer/{{AGENT_INSTRUCTIONS_FILENAME}}` - UX担当の役割定義
@@ -43,6 +46,15 @@ Task toolを使って、以下の2つのサブエージェントを**同時に�
 
 **重要: 必ず1回のメッセージ内で2つのTask呼び出しを行い、並列実行すること。**
 
+{{#IF_ROLE inquisitor}}
+**設計前ブリーフの取り扱いルール（両サブエージェントのプロンプトに必ず含める）:**
+- 「確定事項」は決定済みである。設計で蒸し返さず、そのまま前提とすること
+- 「前提（ASSUMPTION）」は根拠なく置かれた仮定である。**前提が誤っていた場合の影響が局所化される設計**にすること（例: 分岐を1箇所に閉じる、スキーマに逃げ道を残す、設定値として外に出す）
+- 設計書には、どの ASSUMPTION に依存した設計判断なのかを明記すること
+- ブリーフに無い論点で新たに曖昧さに突き当たった場合は、黙って決めずに設計書の「未決事項」節に記載すること
+
+{{/IF_ROLE}}
+
 #### サブエージェント1: UXデザイン担当
 - `subagent_type`: `general-purpose`
 - `model`: `.agents/TEAM.md`「チーム構成」の ux-designer のモデル列を指定（既定: sonnet）
@@ -50,6 +62,9 @@ Task toolを使って、以下の2つのサブエージェントを**同時に�
   - 「あなたはux-designer（UXデザイン担当）として行動する」
   - `.agents/ux-designer/{{AGENT_INSTRUCTIONS_FILENAME}}` の内容（役割・デザイン原則）
   - 分析結果の内容
+{{#IF_ROLE inquisitor}}
+  - 設計前ブリーフの内容と、上記「設計前ブリーフの取り扱いルール」
+{{/IF_ROLE}}
   - UX設計指示書の内容
   - 指示書で指定された既存画面・コンポーネントのコードを読み、デザインパターンを把握すること
   - 成果物を `.agents/ux-designer/deliverables/task-{番号}-ux-design.md` に書き出すこと
@@ -62,6 +77,9 @@ Task toolを使って、以下の2つのサブエージェントを**同時に�
   - 「あなたはtech-lead（技術アーキテクチャ&実装担当）として行動する」
   - `.agents/tech-lead/{{AGENT_INSTRUCTIONS_FILENAME}}` の内容（役割・対象プロジェクト）
   - 分析結果の内容
+{{#IF_ROLE inquisitor}}
+  - 設計前ブリーフの内容と、上記「設計前ブリーフの取り扱いルール」
+{{/IF_ROLE}}
   - 技術設計指示書の内容
   - 既存コードのパターン（ディレクトリ構成、コンポーネントパターン、API通信パターン等）を調査すること
   - DBスキーマは最新レコードを数件取得して実データを確認すること

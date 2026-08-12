@@ -132,6 +132,20 @@ wizard_select_roles() {
 
   echo ""
 
+  # inquisitor
+  echo -e "  ${YELLOW}inquisitor${NC} … 設計に着手する前に要件・前提・境界条件を詰問する諫議大夫"
+  echo -e "              曖昧なまま設計に入ることを防ぎ、確定事項と未決の前提を明文化する。"
+  echo -e "              全自動フローでは AI が根拠に基づいて自答し、根拠なき点のみ前提として残す。"
+  echo -e "              設計の手戻りが多いプロジェクトで特に有用。"
+  if prompt_yn "  inquisitor を有効にしますか？"; then
+    WIZARD_SELECTED_ROLES+=("inquisitor")
+    echo -e "  → ${GREEN}✅ 有効${NC}"
+  else
+    echo -e "  → ☐ 無効"
+  fi
+
+  echo ""
+
   # ux-designer
   echo -e "  ${YELLOW}ux-designer${NC} … UI/UX設計・コンポーネント設計・画面遷移設計を担当"
   echo -e "               フロントエンド開発やユーザー向け機能の実装で特に有用。"
@@ -570,6 +584,7 @@ commander:
 models:
   koumei: "${wizard_default_model}"
   analyst: "${wizard_default_model}"
+  inquisitor: "${wizard_design_model}"
   ux-designer: "${wizard_default_model}"
   tech-lead-design: "${wizard_design_model}"
   tech-lead-implement: "${wizard_impl_model}"
@@ -579,6 +594,11 @@ models:
 review:
   mode: "default"                    # default（codex→claude） | economy（codex→lmstudio→claude） | claude-only
   timeout: 600                       # 外部CLIレビューのタイムアウト（秒）。超過で次順位モデルにフォールバック
+
+# === 詰問設定（inquisitor ロール有効時） ===
+grilling:
+  max_rounds: 3                      # 詰問の最大ラウンド数。論点が出尽くせば早期終了する
+  escalate: "high"                   # high（リスク高の未決のみユーザーに確認）| none（一切停止せずAI判断で確定）
 
 # === 技術スタック ===
 tech_stack:
@@ -611,6 +631,7 @@ custom_instructions:
   tech-lead: ""
   devils-advocate: ""
   analyst: ""
+  inquisitor: ""
   ux-designer: ""
 
 # === 参照ドキュメント ===
@@ -761,7 +782,7 @@ cleanup_previous_cli() {
 
   # 旧CLI用のエージェント指示ファイル名が新CLIと異なる場合は削除（do_setup で新ファイル名のものを生成）
   if [[ "$previous_agent_filename" != "$AGENT_INSTRUCTIONS_FILENAME" ]]; then
-    for role_dir in koumei tech-lead devils-advocate analyst ux-designer task-manager; do
+    for role_dir in koumei tech-lead devils-advocate analyst inquisitor ux-designer task-manager; do
       local old_file=".agents/${role_dir}/${previous_agent_filename}"
       if [[ -f "$old_file" ]]; then
         if is_git_tracked "$old_file"; then
@@ -1008,6 +1029,7 @@ load_config() {
   # モデル設定
   MODEL_KOUMEI=$(yaml_get "models.koumei")
   MODEL_ANALYST=$(yaml_get "models.analyst")
+  MODEL_INQUISITOR=$(yaml_get "models.inquisitor")
   MODEL_UX_DESIGNER=$(yaml_get "models.ux-designer")
   MODEL_TECH_LEAD_DESIGN=$(yaml_get "models.tech-lead-design")
   MODEL_TECH_LEAD_IMPLEMENT=$(yaml_get "models.tech-lead-implement")
@@ -1016,6 +1038,7 @@ load_config() {
     codex)
       MODEL_KOUMEI="${MODEL_KOUMEI:-gpt-5.3-codex}"
       MODEL_ANALYST="${MODEL_ANALYST:-gpt-5.3-codex}"
+      MODEL_INQUISITOR="${MODEL_INQUISITOR:-gpt-5.3-codex}"
       MODEL_UX_DESIGNER="${MODEL_UX_DESIGNER:-gpt-5.3-codex}"
       MODEL_TECH_LEAD_DESIGN="${MODEL_TECH_LEAD_DESIGN:-gpt-5.3-codex}"
       MODEL_TECH_LEAD_IMPLEMENT="${MODEL_TECH_LEAD_IMPLEMENT:-gpt-5.3-codex}"
@@ -1024,6 +1047,7 @@ load_config() {
     antigravity)
       MODEL_KOUMEI="${MODEL_KOUMEI:-gemini-3.5-pro}"
       MODEL_ANALYST="${MODEL_ANALYST:-gemini-3.5-flash}"
+      MODEL_INQUISITOR="${MODEL_INQUISITOR:-gemini-3.5-pro}"
       MODEL_UX_DESIGNER="${MODEL_UX_DESIGNER:-gemini-3.5-flash}"
       MODEL_TECH_LEAD_DESIGN="${MODEL_TECH_LEAD_DESIGN:-gemini-3.5-pro}"
       MODEL_TECH_LEAD_IMPLEMENT="${MODEL_TECH_LEAD_IMPLEMENT:-gemini-3.5-pro}"
@@ -1032,6 +1056,7 @@ load_config() {
     *)
       MODEL_KOUMEI="${MODEL_KOUMEI:-sonnet}"
       MODEL_ANALYST="${MODEL_ANALYST:-sonnet}"
+      MODEL_INQUISITOR="${MODEL_INQUISITOR:-fable}"
       MODEL_UX_DESIGNER="${MODEL_UX_DESIGNER:-sonnet}"
       MODEL_TECH_LEAD_DESIGN="${MODEL_TECH_LEAD_DESIGN:-fable}"
       MODEL_TECH_LEAD_IMPLEMENT="${MODEL_TECH_LEAD_IMPLEMENT:-opus}"
@@ -1044,6 +1069,16 @@ load_config() {
   REVIEW_MODE="${REVIEW_MODE:-default}"
   REVIEW_TIMEOUT=$(yaml_get "review.timeout")
   REVIEW_TIMEOUT="${REVIEW_TIMEOUT:-600}"
+
+  # 詰問設定（inquisitor ロール有効時のみ消費される）
+  GRILLING_MAX_ROUNDS=$(yaml_get "grilling.max_rounds")
+  GRILLING_MAX_ROUNDS="${GRILLING_MAX_ROUNDS:-3}"
+  GRILLING_ESCALATE=$(yaml_get "grilling.escalate")
+  GRILLING_ESCALATE="${GRILLING_ESCALATE:-high}"
+  if [[ "$GRILLING_ESCALATE" != "high" && "$GRILLING_ESCALATE" != "none" ]]; then
+    log_warn "grilling.escalate の値が不正です（'${GRILLING_ESCALATE}'）。high / none のいずれかを指定してください。high として扱います。"
+    GRILLING_ESCALATE="high"
+  fi
 
   # 開発規約の追加行（任意）
   # ブロックスカラー（dev_rules: |）優先、プレーンスカラー（dev_rules: "..."）にもフォールバック
@@ -1091,6 +1126,7 @@ load_config() {
   CUSTOM_INSTRUCTIONS_TECH_LEAD=$(yaml_get_multiline "custom_instructions" "tech-lead")
   CUSTOM_INSTRUCTIONS_DEVILS_ADVOCATE=$(yaml_get_multiline "custom_instructions" "devils-advocate")
   CUSTOM_INSTRUCTIONS_ANALYST=$(yaml_get_multiline "custom_instructions" "analyst")
+  CUSTOM_INSTRUCTIONS_INQUISITOR=$(yaml_get_multiline "custom_instructions" "inquisitor")
   CUSTOM_INSTRUCTIONS_UX_DESIGNER=$(yaml_get_multiline "custom_instructions" "ux-designer")
 
   # 参照ドキュメント
@@ -1127,12 +1163,15 @@ load_config() {
   export KOUMEI_VAR_GIT_BRANCH_PATTERN="$GIT_BRANCH_PATTERN"
   export KOUMEI_VAR_MODEL_KOUMEI="$MODEL_KOUMEI"
   export KOUMEI_VAR_MODEL_ANALYST="$MODEL_ANALYST"
+  export KOUMEI_VAR_MODEL_INQUISITOR="$MODEL_INQUISITOR"
   export KOUMEI_VAR_MODEL_UX_DESIGNER="$MODEL_UX_DESIGNER"
   export KOUMEI_VAR_MODEL_TECH_LEAD_DESIGN="$MODEL_TECH_LEAD_DESIGN"
   export KOUMEI_VAR_MODEL_TECH_LEAD_IMPLEMENT="$MODEL_TECH_LEAD_IMPLEMENT"
   export KOUMEI_VAR_MODEL_DEVILS_ADVOCATE="$MODEL_DEVILS_ADVOCATE"
   export KOUMEI_VAR_REVIEW_MODE="$REVIEW_MODE"
   export KOUMEI_VAR_REVIEW_TIMEOUT="$REVIEW_TIMEOUT"
+  export KOUMEI_VAR_GRILLING_MAX_ROUNDS="$GRILLING_MAX_ROUNDS"
+  export KOUMEI_VAR_GRILLING_ESCALATE="$GRILLING_ESCALATE"
   # 技術スタック系プレースホルダ
   export KOUMEI_VAR_FRAMEWORK="$TECH_FRAMEWORK"
   export KOUMEI_VAR_TECH_STACK_SUMMARY="${TECH_LANGUAGE}${TECH_FRAMEWORK:+ / ${TECH_FRAMEWORK}}"
@@ -1183,6 +1222,10 @@ CONFIG_REQUIRED_KEYS=(
 CONFIG_ROLE_CONDITIONAL_KEYS=(
   "analyst:models.analyst"
   "analyst:custom_instructions.analyst"
+  "inquisitor:models.inquisitor"
+  "inquisitor:custom_instructions.inquisitor"
+  "inquisitor:grilling.max_rounds"
+  "inquisitor:grilling.escalate"
   "ux-designer:models.ux-designer"
   "ux-designer:custom_instructions.ux-designer"
 )
@@ -1637,10 +1680,10 @@ do_setup() {
 
   # ロール展開（コア: koumei/tech-lead/devils-advocate、オプション: analyst/ux-designer、
   # task-manager はネストsubagent前提のため claude ターゲット限定）
-  for role_dir in koumei tech-lead devils-advocate analyst ux-designer task-manager; do
+  for role_dir in koumei tech-lead devils-advocate analyst inquisitor ux-designer task-manager; do
     case "$role_dir" in
-      analyst|ux-designer) has_role "$role_dir" || continue ;;
-      task-manager)        [[ "$TARGET_CLI" == "claude" ]] || continue ;;
+      analyst|inquisitor|ux-designer) has_role "$role_dir" || continue ;;
+      task-manager)                   [[ "$TARGET_CLI" == "claude" ]] || continue ;;
     esac
 
     local tmpl="${TEMPLATES_DIR}/agents/${role_dir}/CLAUDE.md.tmpl"
@@ -1655,6 +1698,7 @@ do_setup() {
         tech-lead)       ci="$CUSTOM_INSTRUCTIONS_TECH_LEAD" ;;
         devils-advocate) ci="$CUSTOM_INSTRUCTIONS_DEVILS_ADVOCATE" ;;
         analyst)         ci="$CUSTOM_INSTRUCTIONS_ANALYST" ;;
+        inquisitor)      ci="$CUSTOM_INSTRUCTIONS_INQUISITOR" ;;
         ux-designer)     ci="$CUSTOM_INSTRUCTIONS_UX_DESIGNER" ;;
       esac
       if [[ -n "$ci" ]]; then
@@ -1706,6 +1750,7 @@ do_setup() {
     local should_install=true
     case "$skill_name" in
       koumei-analyze)                 has_role "analyst" || should_install=false ;;
+      koumei-grill)                   has_role "inquisitor" || should_install=false ;;
       koumei-design|koumei-design-ux) has_role "ux-designer" || should_install=false ;;
     esac
     $should_install || continue
@@ -1789,6 +1834,9 @@ do_setup() {
   log_info "  /${SKILL_PREFIX}-start     タスク定義・全自動実行（--manual で手動進行）"
   if has_role "analyst"; then
     log_info "  /${SKILL_PREFIX}-analyze   既存コード分析"
+  fi
+  if has_role "inquisitor"; then
+    log_info "  /${SKILL_PREFIX}-grill     設計前の詰問（--auto で自動 / 既定は一問一答）"
   fi
   if has_role "ux-designer"; then
     log_info "  /${SKILL_PREFIX}-design    UX+技術設計（並列実行）"

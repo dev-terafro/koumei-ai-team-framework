@@ -1,2 +1,8 @@
 .idea/
 .DS_Store
+
+# setup.sh をこのリポジトリ自身に掛けた生成物（フレームワーク本体ではない）
+/.agents/
+/.claude/
+/hooks/
+/koumei.config.yaml
