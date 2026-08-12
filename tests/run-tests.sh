@@ -119,6 +119,8 @@ assert "devils-advocate ロール生成" test -f .agents/devils-advocate/CLAUDE.
 assert "task-manager 生成（claude限定機能）" test -f .agents/task-manager/CLAUDE.md
 assert_not "analyst は未生成（ロール無効）" test -d .agents/analyst
 assert_not "analyze スキルは未生成" test -d .claude/skills/koumei-analyze
+assert_not "inquisitor は未生成（ロール無効）" test -d .agents/inquisitor
+assert_not "grill スキルは未生成" test -d .claude/skills/koumei-grill
 assert "start スキル + docs 生成" test -f .claude/skills/koumei-start/docs/phases.md
 assert "review スキル + docs 生成" test -f .claude/skills/koumei-review/docs/extended-modes.md
 assert "hooks 4本配布" test "$(ls hooks/*.sh | wc -l)" -eq 4
@@ -127,6 +129,10 @@ assert "matcher がスラッシュなし形式" grep -q '"Write|Edit|MultiEdit"'
 assert_not "未解決プレースホルダなし" grep -rqE '\{\{[A-Z_0-9]+\}\}' .agents .claude hooks
 assert_not "check_command 空 → lint ゲート節なし" grep -q "Lint/Format チェック" .claude/skills/koumei-implement/SKILL.md
 assert "TEAM.md に analyst 行なし（IF_ROLE）" test "$(grep -c 'システム分析担当' .agents/TEAM.md)" -eq 0
+assert "TEAM.md に inquisitor 行なし（IF_ROLE）" test "$(grep -c '諫議大夫' .agents/TEAM.md)" -eq 0
+assert_not "inquisitor 無効時は Phase 2.5 の記述が漏れない" grep -rq "Phase 2.5" .claude/skills
+assert_not "inquisitor 無効時は design-brief 参照が漏れない" grep -rq "design-brief" .claude/skills .agents
+assert "inquisitor 無効時のスキップ表は 3,4 のまま" grep -q "Phase 3,4をスキップ" .claude/skills/koumei-start/docs/rules.md
 assert "参照ドキュメント空 → （登録なし）" grep -q "（登録なし）" .agents/TEAM.md
 assert "Phase 7 にドキュメント反映ステップ" grep -q "requirements-spec-design.md" .claude/skills/koumei-start/docs/phases.md
 assert "claude ターゲットでは Agent tool 記述が残る（IF_CLI誤爆なし）" grep -q "Agent tool" .claude/skills/koumei-start/docs/phases.md
@@ -144,6 +150,7 @@ echo "[T5] 生成: claude / フル設定（全ロール・km prefix・指揮者�
 make_project "$WORK_DIR/t5" \
   's/^skill_prefix: "koumei"/skill_prefix: "km"/' \
   's/^  # - analyst.*/  - analyst/' \
+  's/^  # - inquisitor.*/  - inquisitor/' \
   's/^  # - ux-designer.*/  - ux-designer/' \
   's/^  name: "諸葛孔明"/  name: "臥龍"/' \
   's/^  check_command: ""\(.*\)$/  check_command: "npm run check"/'
@@ -158,11 +165,31 @@ assert_not "孔明の残存なし（ペルソナモデル説明を除く）" gre
 assert "check_command ゲートあり" grep -q "npm run check" .claude/skills/km-implement/SKILL.md
 assert "analyst ロール生成" test -f .agents/analyst/CLAUDE.md
 assert "design スキル生成（ux有効）" test -d .claude/skills/km-design
+# --- inquisitor（Phase 2.5 詰問） ---
+assert "inquisitor ロール生成" test -f .agents/inquisitor/CLAUDE.md
+assert "inquisitor ワークスペース生成" test -d .agents/inquisitor/deliverables
+assert "grill スキル生成" test -f .claude/skills/km-grill/SKILL.md
+assert "TEAM.md に諫議大夫の行" grep -q "諫議大夫" .agents/TEAM.md
+assert "TEAM.md のスキル一覧に km-grill" grep -q "km-grill" .agents/TEAM.md
+assert "inquisitor の既定モデルは fable" grep -qE '\| \*\*諫議大夫\*\* \|.*\*\*fable\*\* \|' .agents/TEAM.md
+assert "phases.md に Phase 2.5" grep -q "Phase 2.5: 詰問" .claude/skills/km-start/docs/phases.md
+assert "SKILL.md の Phase表に 2.5 行" grep -q "詰問（grilling）" .claude/skills/km-start/SKILL.md
+assert "task-template に Phase 2.5 チェック項目" grep -q "Phase 2.5: 詰問" .claude/skills/km-start/docs/task-template.md
+assert "スキップ表が 2.5 込みに切替" grep -q "Phase 2.5,3,4をスキップ" .claude/skills/km-start/docs/rules.md
+assert "grilling.max_rounds が展開されている" grep -q "最大 \*\*3\*\* ラウンド" .claude/skills/km-grill/SKILL.md
+assert "grilling.escalate が展開されている" grep -q 'エスカレーション方針: \*\*`high`\*\*' .claude/skills/km-grill/SKILL.md
+assert "設計スキルが design-brief を入力に取る" grep -q "design-brief" .claude/skills/km-design/SKILL.md
+assert "design-tech も design-brief を参照" grep -q "design-brief" .claude/skills/km-design-tech/SKILL.md
+assert "design-ux も design-brief を参照" grep -q "design-brief" .claude/skills/km-design-ux/SKILL.md
+assert "devils-advocate に design-brief 突合観点" grep -q "設計前ブリーフ（design-brief）との突合" .agents/devils-advocate/CLAUDE.md
+assert "分析成果物の観点が重複していない" test "$(grep -c '^### 分析成果物' .agents/devils-advocate/CLAUDE.md)" -eq 1
+assert "rules.md に詰問の役割分離ルール" grep -q "問う者と答える者を分ける" .claude/skills/km-start/docs/rules.md
+assert "status が grill を次アクションに提案" grep -q "km-grill" .claude/skills/km-status/SKILL.md
 
 # ------------------------------------------------------------
 echo ""
 echo "[T6] 生成: codex ターゲット"
-make_project "$WORK_DIR/t6" 's/^target_cli: "claude"/target_cli: "codex"/'
+make_project "$WORK_DIR/t6" 's/^target_cli: "claude"/target_cli: "codex"/' 's/^  # - inquisitor.*/  - inquisitor/'
 bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行"
 assert "スキルは .codex/skills に配置" test -d .codex/skills/koumei-start
 assert "ロール定義は AGENTS.md" test -f .agents/koumei/AGENTS.md
@@ -179,11 +206,19 @@ assert_not "実行手順書に AskUserQuestion 参照なし（Claude Code固有�
 assert_not "description にマルチタスクモード記載なし" grep -q "マルチタスク" .codex/skills/koumei-start/SKILL.md
 assert_not "rules.md の task-manager 説明にマルチタスクモード記載なし" grep -q "マルチタスクモード" .codex/skills/koumei-start/docs/rules.md
 assert_not "modelパラメータ表記なし（issue#13の取り残し検出）" grep -q '`model` パラメータ' .codex/skills/koumei-start/SKILL.md
+# inquisitor 有効下での cross-CLI 検査。grill スキルには IF_CLI claude ブロックが複数あり、
+# 生成されなければ上の再帰 grep 群が空振りする（issue#13 と同じ穴）
+assert "grill スキルが生成されている（上の再帰grepを空振りさせない）" test -f .codex/skills/koumei-grill/SKILL.md
+assert "inquisitor ロール定義は AGENTS.md" test -f .agents/inquisitor/AGENTS.md
+assert_not "grill: claude固有frontmatterなし" grep -qE 'allowed-tools|disable-model-invocation|argument-hint' .codex/skills/koumei-grill/SKILL.md
+assert_not "grill: subagent_type 参照なし" grep -q "subagent_type" .codex/skills/koumei-grill/SKILL.md
+assert "grill: ロール参照が AGENTS.md" grep -q "agents/inquisitor/AGENTS.md" .codex/skills/koumei-grill/SKILL.md
+assert_not "grill: CLAUDE.md 参照が残っていない" grep -q "inquisitor/CLAUDE.md" .codex/skills/koumei-grill/SKILL.md
 
 # ------------------------------------------------------------
 echo ""
 echo "[T7] 生成: antigravity ターゲット"
-make_project "$WORK_DIR/t7" 's/^target_cli: "claude"/target_cli: "antigravity"/'
+make_project "$WORK_DIR/t7" 's/^target_cli: "claude"/target_cli: "antigravity"/' 's/^  # - inquisitor.*/  - inquisitor/'
 bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行"
 assert "スキルは .agents/skills に配置" test -d .agents/skills/koumei-start
 assert "ロール定義は AGENTS.md" test -f .agents/koumei/AGENTS.md
@@ -191,6 +226,10 @@ assert_not "hooks 未配布" test -d hooks
 assert_not "multi-task.md 未生成（claude限定機能）" test -f .agents/skills/koumei-start/docs/multi-task.md
 assert_not "実行手順書に Agent tool 参照なし（Claude Code固有機構、issue#13）" grep -rq "Agent tool" .agents/skills
 assert_not "実行手順書に AskUserQuestion 参照なし（Claude Code固有機構）" grep -rq "AskUserQuestion" .agents/skills
+assert "grill スキルが生成されている（上の再帰grepを空振りさせない）" test -f .agents/skills/koumei-grill/SKILL.md
+assert_not "grill: claude固有frontmatterなし" grep -qE 'allowed-tools|disable-model-invocation|argument-hint' .agents/skills/koumei-grill/SKILL.md
+assert_not "grill: subagent_type 参照なし" grep -q "subagent_type" .agents/skills/koumei-grill/SKILL.md
+assert "grill: ロール参照が AGENTS.md" grep -q "agents/inquisitor/AGENTS.md" .agents/skills/koumei-grill/SKILL.md
 
 # ------------------------------------------------------------
 echo ""

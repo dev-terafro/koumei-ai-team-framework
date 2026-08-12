@@ -96,6 +96,9 @@ claude の場合は AskUserQuestion を使用する。
 {{#IF_ROLE analyst}}
 - `.agents/analyst/instructions/task-{番号}-instruction.md` — 分析対象・スキーマ・注目ポイント
 {{/IF_ROLE}}
+{{#IF_ROLE inquisitor}}
+- `.agents/inquisitor/instructions/task-{番号}-instruction.md` — 詰問の重点観点（この要件で特に曖昧な領域・過去に手戻りが起きた領域）
+{{/IF_ROLE}}
 {{#IF_ROLE ux-designer}}
 - `.agents/ux-designer/instructions/task-{番号}-instruction.md` — 設計対象・既存UI参照・ユーザーフロー
 {{/IF_ROLE}}
@@ -120,13 +123,21 @@ claude の場合は AskUserQuestion を使用する。
 |-------|------|------|------|
 | 1 | 分析実行 | analyst | 既存コード・スキーマ・依存関係の分析 |
 | 2 | 分析レビュー | devils-advocate | 分析成果物の検分（APPROVED/REVISE） |
+{{#IF_ROLE inquisitor}}
+| 2.5 | 詰問（grilling） | inquisitor | 設計前に前提・境界条件を詰め、design-brief を作成 |
+{{/IF_ROLE}}
 | 3 | UX設計 + 技術設計 | ux-designer + tech-lead | 並列実行 |
 | 4 | 設計レビュー | devils-advocate | 設計成果物の検分（APPROVED/REVISE） |
 | 5 | 実装 | tech-lead | 設計に基づく実装 + ビルド確認 |
 | 6 | コードレビュー | devils-advocate | 実装コードの検分（APPROVED/REVISE） |
 | 7 | ドキュメント反映 + PR作成 | koumei | 公式ドキュメント更新 + ブランチpush + PR作成 |
 
+{{#IF_ROLE inquisitor}}
+**タスク種別によるスキップ**: 軽微修正（クイック）は Phase 1〜4、バグ修正（小）は Phase 2.5,3,4 をスキップ。Phase 6 は常に必須。詳細は [docs/rules.md](docs/rules.md) 参照。
+{{/IF_ROLE}}
+{{#IF_NO_ROLE inquisitor}}
 **タスク種別によるスキップ**: 軽微修正（クイック）は Phase 1〜4、バグ修正（小）は Phase 3,4 をスキップ。Phase 6 は常に必須。詳細は [docs/rules.md](docs/rules.md) 参照。
+{{/IF_NO_ROLE}}
 
 ---
 

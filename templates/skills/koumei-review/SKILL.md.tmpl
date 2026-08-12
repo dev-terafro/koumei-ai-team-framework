@@ -93,3 +93,6 @@ claude の場合は Agent tool の `model` パラメータに指定する。
 ## Notes
 - レビューフォーマットは `devils-advocate/{{AGENT_INSTRUCTIONS_FILENAME}}` の「レビューフォーマット」に従う
 - 各レビューには重大度（Critical / Major / Minor / Suggestion）を明記する
+{{#IF_ROLE inquisitor}}
+- **設計レビュー時**は `.agents/inquisitor/deliverables/task-{番号}-design-brief.md`（設計前ブリーフ）も併せて読み、devils-advocate の「設計前ブリーフ（design-brief）との突合」観点でレビューする。ブリーフは inquisitor の成果物であり無謬ではない。書かれた根拠まで遡って検証すること
+{{/IF_ROLE}}
