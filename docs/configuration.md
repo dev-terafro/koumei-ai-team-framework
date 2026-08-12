@@ -24,7 +24,13 @@
 
 ## roles
 
-コアロール（`koumei` / `tech-lead` / `devils-advocate`）は必須。オプションロール（`analyst` / `ux-designer`）は記載時のみ有効化され、対応するスキル（`-analyze` / `-design` / `-design-ux`）・ワークスペース・TEAM.md の記載が展開される。無効ロールのフェーズはワークフロー上自動的にスキップされる。
+コアロール（`koumei` / `tech-lead` / `devils-advocate`）は必須。オプションロール（`analyst` / `inquisitor` / `ux-designer`）は記載時のみ有効化され、対応するスキル（`-analyze` / `-grill` / `-design` / `-design-ux`）・ワークスペース・TEAM.md の記載が展開される。無効ロールのフェーズはワークフロー上自動的にスキップされる。
+
+| ロール | 有効化で追加されるもの |
+|--------|--------------------|
+| `analyst` | Phase 1（分析）・Phase 2（分析レビュー）、`/koumei-analyze` |
+| `inquisitor` | **Phase 2.5（詰問）**、`/koumei-grill`、`grilling` 設定ブロック |
+| `ux-designer` | Phase 3 の UX設計、`/koumei-design`・`/koumei-design-ux` |
 
 ## target_cli / skill_prefix
 
@@ -47,6 +53,7 @@ tech-lead は**フェーズ分割**（設計と実装で別モデル）。配置
 |------|------|------|
 | `koumei` | sonnet | オーケストレーション（機械的） |
 | `analyst` | sonnet | 読み取り中心の分析 |
+| `inquisitor` | **fable** | 「何を問わなかったか」は誰にも検知できない。問いの質が下流の設計精度を決める |
 | `ux-designer` | sonnet | UX設計 |
 | `tech-lead-design` | **fable** | 設計ミスは実装で増幅されるため最上位 |
 | `tech-lead-implement` | **opus** | トークン量が多いため1段下 |
@@ -62,6 +69,28 @@ tech-lead は**フェーズ分割**（設計と実装で別モデル）。配置
 | `timeout` | `600` | 外部CLIレビューのタイムアウト（秒）。超過で次順位モデルへ自動フォールバック |
 
 一時的なモデル切替は `/koumei-review --model claude` のようにフラグで可能（config 変更不要）。
+
+## grilling
+
+`inquisitor` ロールが有効な場合のみ使用される。Phase 2.5（設計前の詰問）の挙動を制御する。
+
+| キー | 既定 | 説明 |
+|------|------|------|
+| `max_rounds` | `3` | 詰問の最大ラウンド数。前ラウンドの回答から派生する問いを立てて掘り下げる。論点が出尽くせば上限前に終了する |
+| `escalate` | `"high"` | `high` = 根拠なき前提のうちリスク「高」のものだけユーザーに確認して停止 / `none` = 一切停止せず、AI判断で確定させて design-brief に明記して進む |
+
+**`escalate` の選び方:**
+
+- **`high`（既定）** — 全自動フローでも、設計をやり直すレベルの前提だけは人に確認する。停止は多くて1回
+- **`none`** — 夜間バッチ等の無人実行向け。停止しない代わりに、リスク「高」の前提が design-brief の「設計者への申し送り」に「**AI判断・要事後確認**」として残るので、翌朝そこだけ見ればよい
+
+不正な値を指定した場合は警告のうえ `high` として扱われる。
+
+**この工程が精度を上げる仕組み:**
+
+1. **役割分離** — 問いを立てるのは inquisitor サブエージェント、答えるのはオーケストレーター本体。自問自答させると「自分が答えられる問いしか立てない」ため、分離が必須
+2. **根拠の格付け** — 回答には出典（要件指示書 / 公式ドキュメント / 既存コード / 既存慣習からの類推）を必ず付す。出典を示せないものは確定させず「前提（ASSUMPTION）」としてリスク度付きで記録する
+3. **成果物化** — `.agents/inquisitor/deliverables/task-{番号}-design-brief.md` が Phase 3（設計）の入力になり、Phase 4（設計レビュー）では devils-advocate がブリーフと設計の突合を行う
 
 ## tech_stack
 
@@ -95,7 +124,9 @@ AIがコードを書く際に従う技術情報と、実装後の検証コマン
 
 ## custom_instructions
 
-ロール別のプロジェクト固有指示。生成される各ロールの役割定義ファイル末尾に「プロジェクト固有の指示」として追記される。キー: `koumei` / `tech-lead` / `devils-advocate` / `analyst` / `ux-designer`。
+ロール別のプロジェクト固有指示。生成される各ロールの役割定義ファイル末尾に「プロジェクト固有の指示」として追記される。キー: `koumei` / `tech-lead` / `devils-advocate` / `analyst` / `inquisitor` / `ux-designer`。
+
+`inquisitor` には「このプロジェクトで特に詰めるべき論点」を書くとよい（例: `- 課金・請求に関わる論点は必ずリスク「高」として扱うこと`）。過去に手戻りが起きた領域を書いておくと、同じ穴を繰り返さなくなる。
 
 ## reference_docs
 

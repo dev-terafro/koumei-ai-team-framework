@@ -28,6 +28,7 @@ roles:
   - tech-lead
   - devils-advocate
   # - analyst                        # 既存コード分析担当
+  # - inquisitor                     # 設計前の詰問担当（諫議大夫）
   # - ux-designer                    # UI/UX設計担当
 
 # === スキルコマンド設定 ===
@@ -46,11 +47,13 @@ commander:
 # 配置の原則: 高単価モデルは「トークン量が多い場所」ではなく「判断のレバレッジが高く出力が小さい場所」に置く
 # - devils-advocate: レビューVERDICTがフロー全体を制御する品質ゲート → 最上位モデル
 # - tech-lead-design: 設計ミスは実装で増幅される → 最上位モデル
+# - inquisitor: 「何を問わなかったか」は誰にも検知できない。問いの質が下流の設計精度を決める → 最上位モデル
 # - tech-lead-implement: トークン量が多い → 1段下のモデル
 # 指定可能な値: haiku / sonnet / opus / fable（またはフルモデルID）、TEAM.md の外部CLIモデル定義に登録した名前
 models:
   koumei: "sonnet"
   analyst: "sonnet"
+  inquisitor: "fable"
   ux-designer: "sonnet"
   tech-lead-design: "fable"
   tech-lead-implement: "opus"
@@ -60,6 +63,14 @@ models:
 review:
   mode: "default"                    # default（codex→claude） | economy（codex→lmstudio→claude） | claude-only
   timeout: 600                       # 外部CLIレビューのタイムアウト（秒）。超過で次順位モデルにフォールバック
+
+# === 詰問設定（inquisitor ロール有効時に使用） ===
+# 設計前に要件・前提・境界条件を詰問する Phase 2.5 の挙動を制御する
+grilling:
+  max_rounds: 3                      # 詰問の最大ラウンド数。論点が出尽くせば早期終了する
+  escalate: "high"                   # high  = 根拠なき前提のうちリスク「高」のものだけユーザーに確認して停止
+                                      # none  = 一切停止せず、AI判断で確定させて design-brief に明記して進む
+                                      # 夜間バッチ等の無人実行では none を推奨
 
 # === 技術スタック ===
 tech_stack:
@@ -103,6 +114,8 @@ custom_instructions:
   devils-advocate: "" # プロジェクト固有のレビュー観点（複数行は | ブロック形式で）
                       # 記入例: - OWASP Top 10 を重点レビュー
   analyst: ""
+  inquisitor: ""  # プロジェクト固有の詰問観点（複数行は | ブロック形式で）
+                  # 記入例: - 課金・請求に関わる論点は必ずリスク「高」として扱うこと
   ux-designer: ""
 
 # === 参照ドキュメント ===

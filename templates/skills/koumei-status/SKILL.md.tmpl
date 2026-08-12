@@ -34,6 +34,9 @@ allowed-tools: Read Glob Grep
 ### 2. 各担当の成果物確認
 以下のディレクトリを確認し、完了状況を把握する:
 - `.agents/analyst/deliverables/` - 分析成果物
+{{#IF_ROLE inquisitor}}
+- `.agents/inquisitor/deliverables/` - 設計前ブリーフ（design-brief）
+{{/IF_ROLE}}
 - `.agents/ux-designer/deliverables/` - UX設計成果物
 - `.agents/tech-lead/deliverables/` - 技術設計成果物
 - `.agents/devils-advocate/reviews/` - レビュー結果
@@ -50,6 +53,9 @@ allowed-tools: Read Glob Grep
 | 担当 | ステータス | 成果物 |
 |------|----------|--------|
 | analyst | 完了 / 進行中 / 未着手 | ファイル名 |
+{{#IF_ROLE inquisitor}}
+| inquisitor | ... | ... |
+{{/IF_ROLE}}
 | ux-designer | ... | ... |
 | tech-lead (設計) | ... | ... |
 | devils-advocate | ... | ... |
@@ -62,7 +68,13 @@ allowed-tools: Read Glob Grep
 ### 4. 次のアクション提案
 進捗状況に基づき、次に実行すべきスキルコマンドを具体的に提案する:
 - 分析未着手 → `/{{SKILL_PREFIX}}-analyze`
+{{#IF_ROLE inquisitor}}
+- 分析完了・詰問未着手 → `/{{SKILL_PREFIX}}-grill`（設計前の詰問）
+- 詰問完了・設計未着手 → `/{{SKILL_PREFIX}}-design`（並列実行）
+{{/IF_ROLE}}
+{{#IF_NO_ROLE inquisitor}}
 - 分析完了・設計未着手 → `/{{SKILL_PREFIX}}-design`（並列実行）
+{{/IF_NO_ROLE}}
 - 設計完了・レビュー未着手 → `/{{SKILL_PREFIX}}-review`
 - レビュー承認・実装未着手 → `/{{SKILL_PREFIX}}-implement`
 - 実装完了・コードレビュー未着手 → `/{{SKILL_PREFIX}}-review`

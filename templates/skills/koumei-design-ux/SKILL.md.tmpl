@@ -28,8 +28,16 @@ allowed-tools: Read Glob Grep Write Bash Edit
 - `$ARGUMENTS` が指定されている場合、そのタスクIDの指示書を確認
 - 指定がない場合、`.agents/ux-designer/instructions/` の最新の指示書を確認
 
-### 3. 分析結果の参照
+### 3. 分析結果・設計前ブリーフの参照
 `.agents/analyst/deliverables/` にある分析結果を読み、既存の画面構成やデータ構造を理解する。
+
+{{#IF_ROLE inquisitor}}
+`.agents/inquisitor/deliverables/task-{番号}-design-brief.md`（設計前ブリーフ）があれば読み、以下に従う:
+- 「確定事項」は決定済みである。設計で蒸し返さず、そのまま前提とすること
+- 「前提（ASSUMPTION）」は根拠なく置かれた仮定である。**前提が誤っていた場合の影響が局所化される設計**にすること（例: 画面分岐を1箇所に閉じる、コンポーネントの責務を分ける）
+- どの ASSUMPTION に依存した設計判断なのかを設計書に明記すること
+- ブリーフに無い論点で新たに曖昧さに突き当たった場合は、黙って決めずに設計書の「未決事項」節に記載すること
+{{/IF_ROLE}}
 
 ### 4. 既存UIの調査
 指示書で指定された既存画面・コンポーネントのコードを読み、デザインパターンを把握する。
@@ -42,6 +50,7 @@ allowed-tools: Read Glob Grep Write Bash Edit
 - インタラクション仕様（操作→応答の定義）
 - レスポンシブ対応方針
 - 既存UIからの改善ポイント
+- **未決事項**（設計中に突き当たった、根拠を持って決められなかった論点。無い場合は「なし」と明記する）
 
 ### 6. 成果物の作成
 `.agents/ux-designer/deliverables/task-{番号}-ux-design.md` に設計を記載する。

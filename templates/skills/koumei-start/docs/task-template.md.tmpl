@@ -29,6 +29,9 @@
 
 ## 各担当への指示概要
 - **analyst**: {分析指示}
+{{#IF_ROLE inquisitor}}
+- **inquisitor**: {詰問の重点観点}
+{{/IF_ROLE}}
 - **ux-designer**: {UX設計指示}
 - **tech-lead**: {技術設計・実装指示}
 - **devils-advocate**: {レビュー重点観点}
@@ -37,6 +40,9 @@
 - [ ] Phase 0: タスク定義・指示書作成
 - [ ] Phase 1: 分析実行
 - [ ] Phase 2: 分析レビュー
+{{#IF_ROLE inquisitor}}
+- [ ] Phase 2.5: 詰問（grilling）
+{{/IF_ROLE}}
 - [ ] Phase 3: UX設計 + 技術設計
 - [ ] Phase 4: 設計レビュー
 - [ ] Phase 5: 実装
