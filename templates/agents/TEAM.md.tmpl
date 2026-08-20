@@ -21,6 +21,9 @@
 {{/IF_ROLE}}
 | `/{{SKILL_PREFIX}}-review [タスクID]` | devils-advocate | 全成果物のレビュー |
 | `/{{SKILL_PREFIX}}-implement [フェーズ番号]` | tech-lead | 実装（レビュー通過後） |
+{{#IF_ROLE scribe}}
+| `/{{SKILL_PREFIX}}-condense [対象ファイル\|タスクID]` | scribe | 成果物の圧縮・構造化・差分パッケージ作成 |
+{{/IF_ROLE}}
 | `/{{SKILL_PREFIX}}-status` | {{COMMANDER_NAME}} | 進捗確認・次のアクション提案 |
 
 個別実行（差し戻し時の再実行用）:
@@ -50,6 +53,9 @@
 {{/IF_ROLE}}
 | **技術アーキテクチャ&実装担当** | tech-lead | `.agents/tech-lead/` | 技術設計・実装 | **{{MODEL_TECH_LEAD_DESIGN}}**（設計）/ **{{MODEL_TECH_LEAD_IMPLEMENT}}**（実装） |
 | **悪魔の代弁者** | devils-advocate | `.agents/devils-advocate/` | 全成果物のレビュー・問題提起 | **{{MODEL_DEVILS_ADVOCATE}}** |
+{{#IF_ROLE scribe}}
+| **主簿** | scribe | `.agents/scribe/` | 成果物の圧縮・構造化・差分パッケージ作成 | {{MODEL_SCRIBE}} |
+{{/IF_ROLE}}
 
 {{#IF_CLI claude}}
 #### モデル指定の仕組み
@@ -63,6 +69,9 @@
   - **tech-lead 設計 = fable / 実装 = opus**: 設計ミスは実装で増幅される。実装はトークン量が多いため opus（または Codex 委譲）
 {{#IF_ROLE inquisitor}}
   - **inquisitor = fable**: 「何を問わなかったか」は誰にも検知できない。出力は小さいが、問いの質が下流の設計精度をそのまま決める
+{{/IF_ROLE}}
+{{#IF_ROLE scribe}}
+  - **scribe = sonnet**: 要約・選別は原文の理解を要し、取りこぼしは下流で検知できない。重い資料の書き出しで軽量モデルが停止する実測もあるため haiku は充てない
 {{/IF_ROLE}}
   - **koumei / analyst / ux-designer = sonnet**: オーケストレーションは機械的、分析は読み取り中心
 

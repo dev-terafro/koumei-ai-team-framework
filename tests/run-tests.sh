@@ -134,6 +134,14 @@ assert "TEAM.md に inquisitor 行なし（IF_ROLE）" test "$(grep -c '諫議�
 assert_not "inquisitor 無効時は Phase 2.5 の記述が漏れない" grep -rq "Phase 2.5" .claude/skills
 assert_not "inquisitor 無効時は design-brief 参照が漏れない" grep -rq "design-brief" .claude/skills .agents
 assert "inquisitor 無効時のスキップ表は 3,4 のまま" grep -q "Phase 3,4をスキップ" .claude/skills/koumei-start/docs/rules.md
+assert_not "scribe は未生成（ロール無効）" test -d .agents/scribe
+assert_not "condense スキルは未生成" test -d .claude/skills/koumei-condense
+assert "TEAM.md に主簿の行なし（IF_ROLE）" test "$(grep -c '主簿' .agents/TEAM.md)" -eq 0
+assert "scribe 無効時もガードレール検査は残る" grep -q "フェーズ完了時の検査" .claude/skills/koumei-start/docs/phases.md
+assert "scribe 無効時は指揮者が自ら再編" grep -q "自ら再編してよい" .claude/skills/koumei-start/docs/phases.md
+assert "phases.md に単騎駆けモード" grep -q "単騎駆けモード（軽微修正のみ）" .claude/skills/koumei-start/docs/phases.md
+assert "rules.md に単騎駆けの節" grep -q "単騎駆け（軽微修正の単独実行）" .claude/skills/koumei-start/docs/rules.md
+assert "スキップ表の軽微修正が単騎駆けに切替" grep -q "5(\*\*単騎駆け\*\*)" .claude/skills/koumei-start/docs/rules.md
 assert "参照ドキュメント空 → （登録なし）" grep -q "（登録なし）" .agents/TEAM.md
 assert "Phase 7 にドキュメント反映ステップ" grep -q "requirements-spec-design.md" .claude/skills/koumei-start/docs/phases.md
 assert "claude ターゲットでは Agent tool 記述が残る（IF_CLI誤爆なし）" grep -q "Agent tool" .claude/skills/koumei-start/docs/phases.md
@@ -153,6 +161,7 @@ make_project "$WORK_DIR/t5" \
   's/^  # - analyst.*/  - analyst/' \
   's/^  # - inquisitor.*/  - inquisitor/' \
   's/^  # - ux-designer.*/  - ux-designer/' \
+  's/^  # - scribe.*/  - scribe/' \
   's/^  name: "諸葛孔明"/  name: "臥龍"/' \
   's/^  check_command: ""\(.*\)$/  check_command: "npm run check"/'
 bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行"
@@ -186,6 +195,15 @@ assert "devils-advocate に design-brief 突合観点" grep -q "設計前ブリ�
 assert "分析成果物の観点が重複していない" test "$(grep -c '^### 分析成果物' .agents/devils-advocate/CLAUDE.md)" -eq 1
 assert "rules.md に詰問の役割分離ルール" grep -q "問う者と答える者を分ける" .claude/skills/km-start/docs/rules.md
 assert "status が grill を次アクションに提案" grep -q "km-grill" .claude/skills/km-status/SKILL.md
+# --- scribe（主簿・圧縮構造化） ---
+assert "scribe ロール生成" test -f .agents/scribe/CLAUDE.md
+assert "scribe ワークスペース生成" test -d .agents/scribe/instructions
+assert "condense スキル生成" test -f .claude/skills/km-condense/SKILL.md
+assert "TEAM.md に主簿の行" grep -q "主簿" .agents/TEAM.md
+assert "scribe の既定モデルは sonnet" grep -qE '\| \*\*主簿\*\* \|.*sonnet \|' .agents/TEAM.md
+assert "ガードレールが scribe 起動に切替" grep -q "scribe（主簿）を起動して再編" .claude/skills/km-start/docs/phases.md
+assert "token-economy.md が condense を案内" grep -q "km-condense" .claude/skills/km-start/docs/token-economy.md
+assert "condense スキルの節参照が km 解決" grep -q ".agents/scribe/CLAUDE.md" .claude/skills/km-condense/SKILL.md
 
 # ------------------------------------------------------------
 echo ""
