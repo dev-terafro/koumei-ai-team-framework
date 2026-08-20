@@ -322,6 +322,99 @@ assert "旧ワークスペースは削除しない（成果物保護）" test -d
 
 # ------------------------------------------------------------
 echo ""
+echo "[T13] タスク定義の欠落検査（文書配布と検出スクリプトの実動作）"
+
+# --- 文書がロール構成に関わらず配布されるか（scribe 限定ブロックへの混入を防ぐ） ---
+for sc in on off; do
+  if [[ "$sc" == on ]]; then
+    make_project "$WORK_DIR/t13-$sc" 's/^  # - scribe.*/  - scribe/'
+  else
+    make_project "$WORK_DIR/t13-$sc"
+  fi
+  bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 (scribe=$sc)"
+  assert "scribe=$sc: phases.md に欠落検査の節" grep -q "タスク定義の欠落検査" .claude/skills/koumei-start/docs/phases.md
+  assert "scribe=$sc: rules.md に保全ルール" grep -q "タスク定義の保全" .claude/skills/koumei-start/docs/rules.md
+  assert "scribe=$sc: error-handling.md に復旧手順" grep -q "記録が欠落していた場合" .claude/skills/koumei-start/docs/error-handling.md
+  assert "scribe=$sc: worktree の在り処を git に問う" grep -q "git worktree list --porcelain" .claude/skills/koumei-start/docs/phases.md
+  assert_not "scribe=$sc: worktree パスの決め打ちが残っていない" grep -q 'ROOT"/.claude/worktrees/\*' .claude/skills/koumei-start/docs/phases.md
+done
+
+# --- 検出スクリプトの実動作。生成物から抜き出してそのまま走らせる ---
+CHK="$WORK_DIR/stray-check.sh"
+awk '/^ROOT=\$\(git rev-parse --show-toplevel\)$/,/^else rm -f "\$REPORT"/' \
+  "$WORK_DIR/t13-on/.claude/skills/koumei-start/docs/phases.md" > "$CHK"
+assert "検査スクリプトを生成物から抽出できる" test -s "$CHK"
+
+# 検査用リポジトリを作る: mkfix <名前> → $WORK_DIR/f-<名前>
+mkfix() {
+  local d="$WORK_DIR/f-$1"
+  mkdir -p "$d/.agents/koumei/tasks"; cd "$d"
+  git init -q; git config user.email t@t.local; git config user.name t
+  printf 'x\n' > seed; git add -A; git commit -qm init
+  echo "$d"
+}
+# run_chk <dir> [set-e]  → 出力と exit を "exit=N" 付きで返す
+run_chk() {
+  local d="$1"; local prefix=""
+  [[ "${2:-}" == "set-e" ]] && prefix="set -e"
+  ( cd "$d" && { [[ -n "$prefix" ]] && echo "$prefix"; cat "$CHK"; } > _r.sh && sh _r.sh 2>&1; echo "exit=$?" )
+}
+
+# (1) worktree 無し → 迷子なし・exit 0
+d=$(mkfix none)
+out=$(run_chk "$d")
+assert "worktree 無し: 迷子なしと報告" grep -q "迷子なし" <<<"$out"
+assert "worktree 無し: exit 0" grep -q "exit=0" <<<"$out"
+
+# (2) 迷子あり → 検出・exit 1。かつ set -e 下でも黙って止まらない
+d=$(mkfix stray); cd "$d"
+git worktree add -q wtA -b bA; git worktree add -q wtB -b bB
+mkdir -p wtA/.agents/koumei/tasks wtB/.agents/koumei/tasks
+printf '# T1\n共通行\n' > .agents/koumei/tasks/task-1.md
+printf '# T2\n共通行\n' > .agents/koumei/tasks/task-2.md
+printf '# T1\n共通行\n' > wtA/.agents/koumei/tasks/task-1.md
+printf '# T2\n共通行\n失われた記録\n' > wtB/.agents/koumei/tasks/task-2.md
+out=$(run_chk "$d")
+assert "迷子あり: 検出する" grep -q "本体へ届いていない記録" <<<"$out"
+assert "迷子あり: exit 1" grep -q "exit=1" <<<"$out"
+out=$(run_chk "$d" set-e)
+assert "set -e 下でも迷子を報告する（清浄ファイルで中断しない）" grep -q "本体へ届いていない記録" <<<"$out"
+
+# (3) .claude/worktrees 以外に作られた worktree も捕捉する
+d=$(mkfix outside); cd "$d"
+git worktree add -q ../f-outside-wt -b bo
+mkdir -p ../f-outside-wt/.agents/koumei/tasks
+printf '# T1\n' > .agents/koumei/tasks/task-1.md
+printf '# T1\n裁定9箇条\n' > ../f-outside-wt/.agents/koumei/tasks/task-1.md
+out=$(run_chk "$d")
+assert "決め打ち外の worktree も捕捉する" grep -q "本体へ届いていない記録" <<<"$out"
+
+# (4) 定型行のみで構成された迷子も見逃さない（多重集合で照合しているか）
+d=$(mkfix dup); cd "$d"
+git worktree add -q wt -b w; mkdir -p wt/.agents/koumei/tasks
+printf '# T1\n## Phase 4\n- [x] 完了\n判定: APPROVED\n' > .agents/koumei/tasks/task-1.md
+printf '# T1\n## Phase 4\n- [x] 完了\n判定: APPROVED\n- [x] 完了\n判定: APPROVED\n' > wt/.agents/koumei/tasks/task-1.md
+out=$(run_chk "$d")
+assert "既出の定型行だけの迷子も検出する" grep -q "本体へ届いていない記録 2 行" <<<"$out"
+
+# (5) 畳み込み後に本体へ追記された記録を誤検出しない（本体∪原本で照合しているか）
+d=$(mkfix folded); cd "$d"
+git worktree add -q wt -b w; mkdir -p wt/.agents/koumei/tasks
+printf '# T1\n## Phase 4\n判定A\n' > .agents/koumei/tasks/task-1-full.md
+printf '# T1\n（要約）\n## Phase 5\n実装記録X\n' > .agents/koumei/tasks/task-1.md
+printf '# T1\n## Phase 4\n判定A\n## Phase 5\n実装記録X\n' > wt/.agents/koumei/tasks/task-1.md
+out=$(run_chk "$d")
+assert "畳み込み後の追記を偽陽性にしない" grep -q "迷子なし" <<<"$out"
+
+# (6) 本体にタスク定義が無い場合は別文言で警告する
+d=$(mkfix missing); cd "$d"
+git worktree add -q wt -b w; mkdir -p wt/.agents/koumei/tasks
+printf '# T1\n記録\n' > wt/.agents/koumei/tasks/task-1.md
+out=$(run_chk "$d")
+assert "本体に無いタスク定義を警告する" grep -q "本体に存在しないタスク定義" <<<"$out"
+
+# ------------------------------------------------------------
+echo ""
 echo "=========================================="
 echo " 結果: PASS=$PASS FAIL=$FAIL"
 if [[ $FAIL -gt 0 ]]; then
