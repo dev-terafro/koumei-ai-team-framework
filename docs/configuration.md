@@ -36,7 +36,7 @@
 
 | キー | 値 | 説明 |
 |------|-----|------|
-| `target_cli` | `"claude"`（既定） / `"codex"` / `"antigravity"` | スキル配置先と役割定義ファイル名が変わる（claude: `.claude/skills` + `CLAUDE.md`、codex: `.codex/skills` + `AGENTS.md`、antigravity: `.agents/skills` + `AGENTS.md`）。**Hooks・task-manager・マルチタスクは claude 限定** |
+| `target_cli` | `"claude"`（既定） / `"codex"` / `"antigravity"` | スキル配置先と役割定義ファイル名が変わる（claude: `.claude/skills` + `CLAUDE.md`、codex: `.codex/skills` + `AGENTS.md`、antigravity: `.agents/skills` + `AGENTS.md`）。**task-manager・マルチタスクは claude 限定（Hooks は claude / antigravity で利用可）** |
 | `skill_prefix` | `"koumei"`（既定） | コマンド接頭辞。`km` にすると `/km-start` 等になり、スキル名・相互参照・手順書内パスもすべて追従する |
 
 ## commander

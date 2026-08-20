@@ -17,7 +17,11 @@
 - モデル委譲・外部CLIモデルへの呼び出しは claude ターゲット限定の機能（詳細は TEAM.md「モデルについて」参照）
 {{/IF_CLI}}
 {{#IF_CLI antigravity}}
-- モデル委譲・外部CLIモデルへの呼び出しは claude ターゲット限定の機能（詳細は TEAM.md「モデルについて」参照）
+- `invoke_subagent` ツールを用いてサブエージェントを起動する際は、`.agents/TEAM.md` のモデル列の記述に基づき `Model` パラメータを指定する:
+  - `flash`, `mini` などの軽量モデル名なら `Model: flash`
+  - `pro`, `opus`, `sonnet` などの高推論モデル名なら `Model: pro`
+  - それ以外、または未指定なら `Model: inherit`
+- 外部CLIモデルへの委譲は claude ターゲット限定の機能
 {{/IF_CLI}}
 
 ## Phase 1: 分析実行

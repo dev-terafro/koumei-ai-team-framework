@@ -58,7 +58,7 @@ origin の一部機能は Claude Code 固有機構（Hooks / Agent tool / サブ
 | check_command lint ゲート | ✅ | ✅ | ✅ |
 | レビュアー独立実行 | ✅ Agent tool | ✅ 外部CLI呼出（Bash）で代替 | ✅ 同左 |
 | 外部CLIモデル（grok / gemini 等） | ✅ | ✅（Bash 前提） | ✅（同左） |
-| Hooks（quality-gate / log / auto-format / notify） | ✅ | ❌（Claude Code hooks 固有） | ❌ |
+| Hooks（quality-gate / log / auto-format / notify） | ✅ | ❌（Claude Code hooks 固有） | ✅ |
 | セカンドオピニオン / タイムアウトフォールバック | ✅ | △（Bash 呼出部分のみ） | △ |
 | マルチタスク（--multi / task-manager / worktree 並列） | ✅ | ❌（ネストsubagent前提） | ❌ |
 | フェーズ別モデル指定（Agent tool model param） | ✅ | △（CLI 呼出時の -m 指定等で部分対応） | △ |
