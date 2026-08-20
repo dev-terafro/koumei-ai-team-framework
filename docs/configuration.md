@@ -36,7 +36,7 @@
 
 | キー | 値 | 説明 |
 |------|-----|------|
-| `target_cli` | `"claude"`（既定） / `"codex"` / `"antigravity"` | スキル配置先と役割定義ファイル名が変わる（claude: `.claude/skills` + `CLAUDE.md`、codex: `.codex/skills` + `AGENTS.md`、antigravity: `.agents/skills` + `AGENTS.md`）。**Hooks・task-manager・マルチタスクは claude 限定** |
+| `target_cli` | `"claude"`（既定） / `"codex"` / `"antigravity"` | スキル配置先と役割定義ファイル名が変わる（claude: `.claude/skills` + `CLAUDE.md`、codex: `.codex/skills` + `AGENTS.md`、antigravity: `.agents/skills` + `AGENTS.md`）。**Hooks・マルチタスクは claude / antigravity で利用可（codex はコアワークフローのみ）** |
 | `skill_prefix` | `"koumei"`（既定） | コマンド接頭辞。`km` にすると `/km-start` 等になり、スキル名・相互参照・手順書内パスもすべて追従する |
 
 ## commander
@@ -59,7 +59,7 @@ tech-lead は**フェーズ分割**（設計と実装で別モデル）。配置
 | `tech-lead-implement` | **opus** | トークン量が多いため1段下 |
 | `devils-advocate` | **fable** | レビューVERDICTは品質ゲート。誤判定コストが最大 |
 
-指定可能な値: `haiku` / `sonnet` / `opus` / `fable`（またはフルモデルID）、および TEAM.md「外部CLIモデル定義」に登録した外部モデル名（`grok` / `codex` 等。この場合 Agent tool ではなく Bash 経由で起動される）。
+指定可能な値: `haiku` / `sonnet` / `opus` / `fable`（またはフルモデルID）、および TEAM.md「外部CLIモデル定義」に登録した外部モデル名（`agy` / `agy-pro` / `codex` / `grok` 等。この場合 Agent tool ではなく Bash 経由で起動される）。
 
 ## review
 

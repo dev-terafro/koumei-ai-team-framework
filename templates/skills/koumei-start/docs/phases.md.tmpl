@@ -17,7 +17,11 @@
 - モデル委譲・外部CLIモデルへの呼び出しは claude ターゲット限定の機能（詳細は TEAM.md「モデルについて」参照）
 {{/IF_CLI}}
 {{#IF_CLI antigravity}}
-- モデル委譲・外部CLIモデルへの呼び出しは claude ターゲット限定の機能（詳細は TEAM.md「モデルについて」参照）
+- `invoke_subagent` ツールを用いてサブエージェントを起動する際は、`.agents/TEAM.md` のモデル列の記述に基づき `Model` パラメータを指定する:
+  - `flash`, `mini` などの軽量モデル名なら `Model: flash`
+  - `pro`, `opus`, `sonnet` などの高推論モデル名なら `Model: pro`
+  - それ以外、または未指定なら `Model: inherit`
+- 外部CLIモデルへの委譲は claude ターゲット限定の機能
 {{/IF_CLI}}
 
 ## Phase 1: 分析実行
@@ -192,10 +196,19 @@ Phase 2 と同様に devils-advocate サブエージェントを起動する。
 ## Phase 5: 実装
 
 {{#IF_CLI claude}}
-### モデル委譲チェック
-`.agents/TEAM.md` の「モデル委譲設定」テーブルを確認する。
-`tech-lead` が `実装（/{{SKILL_PREFIX}}-implement）` の委譲先として設定されている場合 → **Codex委譲モード**で実行する。
-設定がない場合 → **通常モード**（Claudeサブエージェント）で実行する。
+### 外部CLI委譲・動的フォールバックチェック
+`.agents/TEAM.md` の tech-lead「実装モデル」を確認する。
+`agy` / `codex` などの外部CLIモデルが指定されている場合、または動的負荷分散を行う場合:
+
+1. **CLI 利用可否の確認**:
+   - `agy` が指定または `command -v agy` が成功する場合 → **agy委譲モード**
+   - `codex` が指定または `command -v codex` が成功する場合 → **Codex委譲モード**
+   - どちらも利用不可の場合 → **通常モード（Claudeサブエージェント）** へフォールバック
+
+2. **途中停止・レートリミット時の自動引き継ぎ・フォールバック**:
+   - 外部CLI実行中にクォータ上限（429 / Rate Limit / Quota Exceeded）やエラーが発生した場合:
+     - {{COMMANDER_NAME}}のペルソナで報告: `「先鋒の兵站（クォータ）が尽きたようじゃ。直ちに第二陣へ交代させよ！」`
+     - 作業途中の差分（`git status` / `git diff`）を確認し、フォールバック先のモデル（Claude サブエージェント）に「先行エージェントの作業途中の差分を引き継ぎ、不完全なら補正して実装を完遂せよ」と指示して自動継続する。
 {{/IF_CLI}}
 
 ### 通常モード
@@ -209,6 +222,13 @@ tech-lead をサブエージェントとして起動する（起動方法はCLI�
 - 軽微修正（クイック）の場合: 設計書が存在しないため、タスク定義と指示書を実装の前提とすること
 
 {{#IF_CLI claude}}
+### agy委譲モード
+Bash tool で `agy -p "{指示プロンプト}" --dangerously-skip-permissions` を実行する（worktree 内での実行を推奨）。
+※ 引数のエスケープ破損を防ぐため、プロンプトには成果物全文ではなくファイルパスを参照させる。
+
+**プロンプトに含める内容:**
+- 「あなたはテックリードです。.agents/tech-lead/CLAUDE.md の役割定義に従い、設計書 [.agents/tech-lead/deliverables/task-{番号}-design.md] および指示書 [.agents/tech-lead/instructions/task-{番号}.md] に基づいて実装を行ってください。ファイル修正とテスト実行を行い、git commit は行わないこと。」
+
 ### Codex委譲モード
 Bash tool で `codex exec -s workspace-write --full-auto "{プロンプト}"` を実行する（コード書き込みがあるため workspace-write 必須。TEAM.md の呼び出し方法に `-m` があればそれに従う）。
 

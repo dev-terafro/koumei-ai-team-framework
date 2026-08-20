@@ -33,7 +33,7 @@ roles:
 
 # === スキルコマンド設定 ===
 # 対象CLI: "claude"（.claude/skills + CLAUDE.md）または "codex"（.codex/skills + AGENTS.md）または "antigravity"（.agents/skills + AGENTS.md）
-# Hooks・マルチタスク等の Claude Code 固有機能は claude ターゲットのみ展開される
+# Hooks は claude / antigravity（.agents/hooks.json）、マルチタスクは claude ターゲットのみ展開される
 target_cli: "claude"
 # スキルコマンドの接頭辞（例: /koumei-start, /km-start, /dev-start）
 skill_prefix: "koumei"
@@ -48,8 +48,8 @@ commander:
 # - devils-advocate: レビューVERDICTがフロー全体を制御する品質ゲート → 最上位モデル
 # - tech-lead-design: 設計ミスは実装で増幅される → 最上位モデル
 # - inquisitor: 「何を問わなかったか」は誰にも検知できない。問いの質が下流の設計精度を決める → 最上位モデル
-# - tech-lead-implement: トークン量が多い → 1段下のモデル
-# 指定可能な値: haiku / sonnet / opus / fable（またはフルモデルID）、TEAM.md の外部CLIモデル定義に登録した名前
+# - tech-lead-implement: トークン量が多い → 1段下のモデル（または agy などの外部CLI委譲）
+# 指定可能な値: haiku / sonnet / opus / fable（またはフルモデルID）、TEAM.md の外部CLIモデル定義に登録した名前（agy / codex 等）
 models:
   koumei: "sonnet"
   analyst: "sonnet"

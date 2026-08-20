@@ -1683,7 +1683,7 @@ do_setup() {
   for role_dir in koumei tech-lead devils-advocate analyst inquisitor ux-designer task-manager; do
     case "$role_dir" in
       analyst|inquisitor|ux-designer) has_role "$role_dir" || continue ;;
-      task-manager)                   [[ "$TARGET_CLI" == "claude" ]] || continue ;;
+      task-manager)                   [[ "$TARGET_CLI" == "claude" || "$TARGET_CLI" == "antigravity" ]] || continue ;;
     esac
 
     local tmpl="${TEMPLATES_DIR}/agents/${role_dir}/CLAUDE.md.tmpl"
@@ -1769,9 +1769,9 @@ do_setup() {
         [[ -f "$doc_tmpl" ]] || continue
         local doc_name
         doc_name=$(basename "$doc_tmpl" .tmpl)
-        # multi-task.md はネストsubagent前提（task-manager と同じく claude ターゲット限定）
-        if [[ "$doc_name" == "multi-task.md" && "$TARGET_CLI" != "claude" ]]; then
-          # 旧バージョン・target_cli変更前に生成された残骸があれば削除（claude限定機能の陳腐化ファイル）
+        # multi-task.md はネストsubagent/invoke_subagent前提（claude / antigravity ターゲットのみ展開）
+        if [[ "$doc_name" == "multi-task.md" && "$TARGET_CLI" != "claude" && "$TARGET_CLI" != "antigravity" ]]; then
+          # 旧バージョン・target_cli変更前に生成された残骸があれば削除（非対応CLIの陳腐化ファイル）
           [[ -f "${SKILLS_DIR}/${target_name}/docs/${doc_name}" ]] && rm -f "${SKILLS_DIR}/${target_name}/docs/${doc_name}"
           continue
         fi
@@ -1780,8 +1780,8 @@ do_setup() {
     fi
   done
 
-  # --- Hooks / settings.json（Claude Code ターゲット限定） ---
-  if [[ "$TARGET_CLI" == "claude" ]]; then
+  # --- Hooks / settings.json（Claude Code / Antigravity ターゲット対応） ---
+  if [[ "$TARGET_CLI" == "claude" || "$TARGET_CLI" == "antigravity" ]]; then
     log_step "Hooks を展開中..."
     for hook_file in "${TEMPLATES_DIR}"/hooks/*.sh; do
       [[ -f "$hook_file" ]] || continue
@@ -1796,29 +1796,53 @@ do_setup() {
       fi
     done
 
-    # settings.json（hooks 設定のマージ）
-    local settings_tmpl="${TEMPLATES_DIR}/claude/settings.json"
-    if [[ -f "$settings_tmpl" ]]; then
-      if $DRY_RUN; then
-        log_info "[DRY-RUN] Would merge: .claude/settings.json"
-      elif [[ ! -f ".claude/settings.json" ]]; then
-        mkdir -p .claude
-        cp "$settings_tmpl" ".claude/settings.json"
-        log_info "作成: .claude/settings.json"
-      elif command -v jq &>/dev/null; then
-        if jq -e '.hooks' .claude/settings.json >/dev/null 2>&1; then
-          log_warn ".claude/settings.json に既存の hooks 設定があります。${settings_tmpl} を参考に手動でマージしてください。"
-        else
-          local merged
-          if merged=$(jq -s '.[0] + {hooks: .[1].hooks}' .claude/settings.json "$settings_tmpl" 2>/dev/null) && [[ -n "$merged" ]]; then
-            printf '%s\n' "$merged" > .claude/settings.json
-            log_info "マージ: .claude/settings.json に hooks 設定を追加"
+    if [[ "$TARGET_CLI" == "claude" ]]; then
+      # settings.json（hooks 設定のマージ）
+      local settings_tmpl="${TEMPLATES_DIR}/claude/settings.json"
+      if [[ -f "$settings_tmpl" ]]; then
+        if $DRY_RUN; then
+          log_info "[DRY-RUN] Would merge: .claude/settings.json"
+        elif [[ ! -f ".claude/settings.json" ]]; then
+          mkdir -p .claude
+          cp "$settings_tmpl" ".claude/settings.json"
+          log_info "作成: .claude/settings.json"
+        elif command -v jq &>/dev/null; then
+          if jq -e '.hooks' .claude/settings.json >/dev/null 2>&1; then
+            log_warn ".claude/settings.json に既存の hooks 設定があります。${settings_tmpl} を参考に手動でマージしてください。"
           else
-            log_warn ".claude/settings.json の自動マージに失敗しました。${settings_tmpl} を参考に手動で追加してください。"
+            local merged
+            if merged=$(jq -s '.[0] + {hooks: .[1].hooks}' .claude/settings.json "$settings_tmpl" 2>/dev/null) && [[ -n "$merged" ]]; then
+              printf '%s\n' "$merged" > .claude/settings.json
+              log_info "マージ: .claude/settings.json に hooks 設定を追加"
+            else
+              log_warn ".claude/settings.json の自動マージに失敗しました。${settings_tmpl} を参考に手動で追加してください。"
+            fi
           fi
+        else
+          log_warn "jq が無いため .claude/settings.json をマージできません。${settings_tmpl} を参考に手動で追加してください。"
         fi
-      else
-        log_warn "jq が無いため .claude/settings.json をマージできません。${settings_tmpl} を参考に手動で追加してください。"
+      fi
+    elif [[ "$TARGET_CLI" == "antigravity" ]]; then
+      # hooks.json（hooks 設定のマージ）
+      local hooks_tmpl="${TEMPLATES_DIR}/agents/hooks.json"
+      if [[ -f "$hooks_tmpl" ]]; then
+        if $DRY_RUN; then
+          log_info "[DRY-RUN] Would merge: .agents/hooks.json"
+        elif [[ ! -f ".agents/hooks.json" ]]; then
+          mkdir -p .agents
+          cp "$hooks_tmpl" ".agents/hooks.json"
+          log_info "作成: .agents/hooks.json"
+        elif command -v jq &>/dev/null; then
+          local merged
+          if merged=$(jq -s '.[0] * .[1]' .agents/hooks.json "$hooks_tmpl" 2>/dev/null) && [[ -n "$merged" ]]; then
+            printf '%s\n' "$merged" > .agents/hooks.json
+            log_info "マージ: .agents/hooks.json に hooks 設定を追加"
+          else
+            log_warn ".agents/hooks.json の自動マージに失敗しました。${hooks_tmpl} を参考に手動で追加してください。"
+          fi
+        else
+          log_warn "jq が無いため .agents/hooks.json をマージできません。${hooks_tmpl} を参考に手動で追加してください。"
+        fi
       fi
     fi
   fi
