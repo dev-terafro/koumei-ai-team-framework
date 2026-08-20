@@ -60,11 +60,80 @@
 - **2回目以降のレビューの前** → scribe に差分パッケージ（モードB）を作らせ、レビューには必読としてそのパッケージを渡す
 - **タスク定義ファイルが 30KB 超** → scribe に畳み込み（モードC）を命じる
 - scribe の完了後、`-full.md`（原本）と本文・appendix の実在を確認してから次フェーズへ進む
+
 {{/IF_ROLE}}
 {{#IF_NO_ROLE scribe}}
 - **成果物の本文が 20KB 超** → 作成エージェントに定め1の体裁（本文/appendix 分離・§番号・冒頭索引）への是正を命じる。軽微な超過なら {{COMMANDER_NAME}} が自ら再編してよい（原本は `-full.md` として温存し、結論・根拠・数値は必ず本文に残す）
 - **タスク定義ファイルが 30KB 超** → 完了済みフェーズの記録を要約に畳む（token-economy.md「{{COMMANDER_NAME}} 自身への戒め」）
 {{/IF_NO_ROLE}}
+
+### タスク定義の欠落検査（worktree 併用時は必須）
+
+**タスク定義への追記は、必ずリポジトリルートからの絶対パスで行うこと。**
+
+```
+$(git rev-parse --show-toplevel)/.agents/koumei/tasks/task-{番号}.md
+```
+
+理由: worktree を併用すると、各 worktree にも `.agents/` が実在する場合がある
+（かつて `.agents/` を Git 管理下に置いていた名残など）。この状態でシェルの
+作業ディレクトリが worktree に残ったまま**相対パス**で追記すると、
+`<worktree>/.agents/koumei/tasks/task-{番号}.md` という**別ファイルが静かに作られる**。
+追記は成功したように見えるがエラーは出ず、記録は本体へ届かない。
+
+進捗記録は「中断からの再開の根拠」であるため、これを失うと**完了済みのフェーズが
+未実施と誤認される**。実際に、大規模タスク2件でこの事故が発生し、
+Phase 4 の判定・裁定・Phase 5 の実装記録が失われかけた（畳み込み時に偶然発見された）。
+
+**各フェーズの完了時に、次を実行して迷子を検出すること。**
+
+```sh
+ROOT=$(git rev-parse --show-toplevel)
+REPORT=$(mktemp)
+
+# worktree の在り処は git に問う（.claude/worktrees 以外に作られていても捕捉するため）
+git worktree list --porcelain | sed -n 's/^worktree //p' | while IFS= read -r wt; do
+  [ "$wt" = "$ROOT" ] && continue
+  for f in "$wt"/.agents/koumei/tasks/task-*.md; do
+    [ -f "$f" ] || continue
+    base=$(basename "$f" .md); case "$base" in *-full) continue;; esac
+
+    # 照合先は「本体 ∪ 原本」。畳み込み後に本体へ追記された記録を誤検出しないため
+    ref=$(mktemp)
+    cat "$ROOT/.agents/koumei/tasks/$base.md" \
+        "$ROOT/.agents/koumei/tasks/$base-full.md" 2>/dev/null \
+      | grep '[^[:space:]]' | sort > "$ref"
+
+    if [ ! -s "$ref" ]; then
+      printf '⚠️  本体に存在しないタスク定義: %s\n' "$f" >> "$REPORT"
+    else
+      # comm による多重集合差分。行の「既出／未出」ではなく出現回数で見るため、
+      # 定型行だけで構成された迷子も、失われた行数も取りこぼさない
+      lost=$(grep '[^[:space:]]' "$f" | sort | comm -23 - "$ref" | wc -l | tr -d ' ')
+      [ "$lost" -gt 0 ] && printf '⚠️  本体へ届いていない記録 %s 行: %s\n' "$lost" "$f" >> "$REPORT"
+    fi
+    rm -f "$ref"
+  done
+done
+
+if [ -s "$REPORT" ]; then cat "$REPORT"; rm -f "$REPORT"; false
+else rm -f "$REPORT"; echo "✅ 迷子なし"; fi
+```
+
+検出の原理: **進捗記録は追記のみで育つ**ため、worktree 側の複製に「本体へ届いていない行」が
+あれば、それは失われた記録である。照合は行の**出現回数**で行う（集合ではなく多重集合）。
+`- [x] 完了` のような定型行は本体にも既出であるため、集合で照合すると迷子を見逃す。
+
+主簿による畳み込み後は本体が要約に置き換わるため、原本 `-full.md` が存在する場合は
+**本体と原本の和集合**を照合先とする。原本だけを見ると、畳み込み後に本体へ正しく
+追記された記録を「未達」と誤検出するためである。
+
+検査が異常終了と区別できるよう、迷子がなければ `✅ 迷子なし` を出して 0 で、
+迷子があれば警告を出して 1 で終わる。`set -e` の下でも途中で黙って止まらない。
+
+**検出したら、失われた記録を本体の正しい位置（時系列順）へ差し戻すこと。**
+断片ファイルは復旧の証跡として残し、内容を本体へ移し終えてから削除する。
+
 
 ---
 
