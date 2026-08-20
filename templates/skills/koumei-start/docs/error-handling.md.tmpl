@@ -67,8 +67,13 @@ claude の場合は AskUserQuestion を使用する。
 1. 断片を探す（詳細は [phases.md](phases.md)「タスク定義の欠落検査」）
 
 ```sh
-ls -la $(git rev-parse --show-toplevel)/.claude/worktrees/*/.agents/koumei/tasks/task-*.md 2>/dev/null
+git worktree list --porcelain | sed -n 's/^worktree //p' | while IFS= read -r wt; do
+  ls -la "$wt"/.agents/koumei/tasks/task-*.md 2>/dev/null
+done
 ```
+
+worktree の在り処は `git worktree list` に問う。置き場所を決め打ちすると、
+`git worktree add` で別の場所に作られたものを見落とす。
 
 2. 断片が見つかったら、**本体と原本 `-full.md` の両方**へ、時系列上の正しい位置に差し戻す
    （末尾に足してはならない。再開時に順序を誤読する）
