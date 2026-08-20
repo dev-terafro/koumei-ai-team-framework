@@ -59,7 +59,7 @@ tech-lead は**フェーズ分割**（設計と実装で別モデル）。配置
 | `tech-lead-implement` | **opus** | トークン量が多いため1段下 |
 | `devils-advocate` | **fable** | レビューVERDICTは品質ゲート。誤判定コストが最大 |
 
-指定可能な値: `haiku` / `sonnet` / `opus` / `fable`（またはフルモデルID）、および TEAM.md「外部CLIモデル定義」に登録した外部モデル名（`grok` / `codex` 等。この場合 Agent tool ではなく Bash 経由で起動される）。
+指定可能な値: `haiku` / `sonnet` / `opus` / `fable`（またはフルモデルID）、および TEAM.md「外部CLIモデル定義」に登録した外部モデル名（`agy` / `agy-pro` / `codex` / `grok` 等。この場合 Agent tool ではなく Bash 経由で起動される）。
 
 ## review
 

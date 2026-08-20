@@ -15,7 +15,8 @@
 - **フェーズ別モデル配置**: 高単価モデルを「判断のレバレッジが高い所」（設計・レビュー判定）に配置（tech-lead は設計/実装でモデル分割）
 - **レビュー拡張**: `--security`（OWASP+STRIDE監査）/ `--second-opinion`（外部モデル突合）/ `--model`（一時切替）/ タイムアウトフォールバック
 - **マルチタスク並列実行**: `--multi` で「1タスク=1ブランチ=1PR」を git worktree で並列実行（claude限定）
-- **Hooks**: TEAM.md 保護・操作ログ・自動フォーマット・フェーズ完了通知（claude限定）
+- **Hooks**: TEAM.md 保護・操作ログ・自動フォーマット・フェーズ完了通知（claude / antigravity 対応）
+- **クロスCLI・外部委譲**: Claude CLI から Antigravity（agy）や Codex へ実装フェーズを安全に委譲（worktree 隔離・レートリミット時の自動引き継ぎ・フォールバック機能付き）
 - **config 駆動の更新機構**: `--update` はスキーマ差分を検知し、必要なら `--reconfig` を案内
 - **マルチCLI対応**: `target_cli` で claude / codex / antigravity に展開（機能マトリクスは後述）
 
