@@ -337,11 +337,15 @@ for sc in on off; do
   assert "scribe=$sc: error-handling.md に復旧手順" grep -q "記録が欠落していた場合" .claude/skills/koumei-start/docs/error-handling.md
   assert "scribe=$sc: worktree の在り処を git に問う" grep -q "git worktree list --porcelain" .claude/skills/koumei-start/docs/phases.md
   assert_not "scribe=$sc: worktree パスの決め打ちが残っていない" grep -q 'ROOT"/.claude/worktrees/\*' .claude/skills/koumei-start/docs/phases.md
+  assert "scribe=$sc: 素性による処置の書き分けがある" grep -q "差し戻してはならない" .claude/skills/koumei-start/docs/phases.md
+  assert "scribe=$sc: 復旧手順が素性の確認を先に命じる" grep -q "素性を確かめる" .claude/skills/koumei-start/docs/error-handling.md
+  assert "scribe=$sc: 基準を --git-common-dir から求める" grep -q "git-common-dir" .claude/skills/koumei-start/docs/phases.md
+  assert_not "scribe=$sc: --show-toplevel を基準に使っていない" grep -q '^MAIN=$(git rev-parse --show-toplevel)' .claude/skills/koumei-start/docs/phases.md
 done
 
 # --- 検出スクリプトの実動作。生成物から抜き出してそのまま走らせる ---
 CHK="$WORK_DIR/stray-check.sh"
-awk '/^ROOT=\$\(git rev-parse --show-toplevel\)$/,/^else rm -f "\$REPORT"/' \
+awk '/^MAIN=\$\(dirname/,/^else rm -f "\$STRAY" "\$INFO"/' \
   "$WORK_DIR/t13-on/.claude/skills/koumei-start/docs/phases.md" > "$CHK"
 assert "検査スクリプトを生成物から抽出できる" test -s "$CHK"
 
@@ -359,6 +363,10 @@ run_chk() {
   [[ "${2:-}" == "set-e" ]] && prefix="set -e"
   ( cd "$d" && { [[ -n "$prefix" ]] && echo "$prefix"; cat "$CHK"; } > _r.sh && sh _r.sh 2>&1; echo "exit=$?" )
 }
+# run_chk_at <走らせる場所> <スクリプト置き場>  → 場所を変えて同じ検査を走らせる
+run_chk_at() {
+  ( cd "$1" && cp "$CHK" _r.sh && sh _r.sh 2>&1; echo "exit=$?" )
+}
 
 # (1) worktree 無し → 迷子なし・exit 0
 d=$(mkfix none)
@@ -375,10 +383,10 @@ printf '# T2\n共通行\n' > .agents/koumei/tasks/task-2.md
 printf '# T1\n共通行\n' > wtA/.agents/koumei/tasks/task-1.md
 printf '# T2\n共通行\n失われた記録\n' > wtB/.agents/koumei/tasks/task-2.md
 out=$(run_chk "$d")
-assert "迷子あり: 検出する" grep -q "本体へ届いていない記録" <<<"$out"
+assert "迷子あり: 検出する" grep -q "未コミットの記録" <<<"$out"
 assert "迷子あり: exit 1" grep -q "exit=1" <<<"$out"
 out=$(run_chk "$d" set-e)
-assert "set -e 下でも迷子を報告する（清浄ファイルで中断しない）" grep -q "本体へ届いていない記録" <<<"$out"
+assert "set -e 下でも迷子を報告する（清浄ファイルで中断しない）" grep -q "未コミットの記録" <<<"$out"
 
 # (3) .claude/worktrees 以外に作られた worktree も捕捉する
 d=$(mkfix outside); cd "$d"
@@ -387,7 +395,7 @@ mkdir -p ../f-outside-wt/.agents/koumei/tasks
 printf '# T1\n' > .agents/koumei/tasks/task-1.md
 printf '# T1\n裁定9箇条\n' > ../f-outside-wt/.agents/koumei/tasks/task-1.md
 out=$(run_chk "$d")
-assert "決め打ち外の worktree も捕捉する" grep -q "本体へ届いていない記録" <<<"$out"
+assert "決め打ち外の worktree も捕捉する" grep -q "未コミットの記録" <<<"$out"
 
 # (4) 定型行のみで構成された迷子も見逃さない（多重集合で照合しているか）
 d=$(mkfix dup); cd "$d"
@@ -395,7 +403,7 @@ git worktree add -q wt -b w; mkdir -p wt/.agents/koumei/tasks
 printf '# T1\n## Phase 4\n- [x] 完了\n判定: APPROVED\n' > .agents/koumei/tasks/task-1.md
 printf '# T1\n## Phase 4\n- [x] 完了\n判定: APPROVED\n- [x] 完了\n判定: APPROVED\n' > wt/.agents/koumei/tasks/task-1.md
 out=$(run_chk "$d")
-assert "既出の定型行だけの迷子も検出する" grep -q "本体へ届いていない記録 2 行" <<<"$out"
+assert "既出の定型行だけの迷子も検出する" grep -q "未コミットの記録 2 行" <<<"$out"
 
 # (5) 畳み込み後に本体へ追記された記録を誤検出しない（本体∪原本で照合しているか）
 d=$(mkfix folded); cd "$d"
@@ -412,6 +420,52 @@ git worktree add -q wt -b w; mkdir -p wt/.agents/koumei/tasks
 printf '# T1\n記録\n' > wt/.agents/koumei/tasks/task-1.md
 out=$(run_chk "$d")
 assert "本体に無いタスク定義を警告する" grep -q "本体に存在しないタスク定義" <<<"$out"
+
+# (7) 未コミットの迷子は差し戻し要として報じ、exit 1 になる
+d=$(mkfix uncommitted); cd "$d"
+printf '# T1\n初期\n' > .agents/koumei/tasks/task-1.md
+git add -A; git commit -qm base
+git worktree add -q wt -b w
+printf '## Phase 4 判定\n裁定9箇条\n' >> wt/.agents/koumei/tasks/task-1.md
+out=$(run_chk "$d")
+assert "未コミットの迷子を差し戻し要として報じる" grep -q "未コミットの記録 2 行（差し戻し要）" <<<"$out"
+assert "未コミットの迷子は exit 1" grep -q "exit=1" <<<"$out"
+
+# (8) ブランチ上のマージ待ちは差し戻し不要として報じ、exit 0（異常ではない）
+d=$(mkfix pending); cd "$d"
+printf '# T1\n初期\n' > .agents/koumei/tasks/task-1.md
+git add -A; git commit -qm base
+git worktree add -q wt -b feature/work
+printf '## Phase 5 実装記録\n' >> wt/.agents/koumei/tasks/task-1.md
+git -C wt add -A; git -C wt commit -qm rec
+out=$(run_chk "$d")
+assert "マージ待ちを差し戻し不要として報じる" grep -q "マージ待ち・差し戻し不要" <<<"$out"
+assert "マージ待ちはブランチ名を添える" grep -q "\[feature/work\]" <<<"$out"
+assert_not "マージ待ちを差し戻し要と誤報しない" grep -q "差し戻し要" <<<"$out"
+assert "マージ待ちのみなら exit 0（異常ではない）" grep -q "exit=0" <<<"$out"
+
+# (9) worktree の中から走らせても、本体から走らせた場合と同じ答えを返す
+#     （迷子が生まれるのは cwd が worktree に在るときであり、そこで沈黙しては用をなさない）
+d=$(mkfix fromwt); cd "$d"
+printf '# T1\n- [x] Phase 1\n' > .agents/koumei/tasks/task-1.md
+git add -A; git commit -qm base
+git worktree add -q wt -b w
+printf '## Phase 4 判定\n裁定9箇条\n' >> wt/.agents/koumei/tasks/task-1.md
+from_main=$(run_chk_at "$d")
+from_wt=$(run_chk_at "$d/wt")
+assert "本体から走らせると迷子を検出する" grep -q "未コミットの記録 2 行" <<<"$from_main"
+assert "worktree の中から走らせても迷子を検出する" grep -q "未コミットの記録 2 行" <<<"$from_wt"
+assert "答えが走らせた場所に依らない" test "$from_main" = "$from_wt"
+
+# (10) worktree が古い複製の場合、本体を迷子として告発しない（主客転倒の防止）
+d=$(mkfix stale); cd "$d"
+printf '# T1\n古い\n' > .agents/koumei/tasks/task-1.md
+git add -A; git commit -qm base
+git worktree add -q wt -b w
+printf '## Phase 5 本体側で正しく追記\n' >> .agents/koumei/tasks/task-1.md
+out=$(run_chk_at "$d/wt")
+assert "古い複製から走らせても本体を告発しない" grep -q "迷子なし" <<<"$out"
+assert "主客転倒しないので exit 0" grep -q "exit=0" <<<"$out"
 
 # ------------------------------------------------------------
 echo ""

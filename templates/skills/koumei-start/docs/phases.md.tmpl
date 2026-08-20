@@ -88,36 +88,48 @@ Phase 4 の判定・裁定・Phase 5 の実装記録が失われかけた（畳�
 **各フェーズの完了時に、次を実行して迷子を検出すること。**
 
 ```sh
-ROOT=$(git rev-parse --show-toplevel)
-REPORT=$(mktemp)
+# 照合の基準は必ず「本体」。--show-toplevel は worktree 内では worktree 自身を返すため、
+# 本体を指す --git-common-dir から求める。これを誤ると主客が転倒する
+MAIN=$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")
+STRAY=$(mktemp)   # 未コミット＝真の迷子
+INFO=$(mktemp)    # ブランチ上＝マージ待ち
 
 # worktree の在り処は git に問う（.claude/worktrees 以外に作られていても捕捉するため）
 git worktree list --porcelain | sed -n 's/^worktree //p' | while IFS= read -r wt; do
-  [ "$wt" = "$ROOT" ] && continue
+  [ "$wt" = "$MAIN" ] && continue   # 本体は照合の基準そのもの
   for f in "$wt"/.agents/koumei/tasks/task-*.md; do
     [ -f "$f" ] || continue
     base=$(basename "$f" .md); case "$base" in *-full) continue;; esac
 
     # 照合先は「本体 ∪ 原本」。畳み込み後に本体へ追記された記録を誤検出しないため
     ref=$(mktemp)
-    cat "$ROOT/.agents/koumei/tasks/$base.md" \
-        "$ROOT/.agents/koumei/tasks/$base-full.md" 2>/dev/null \
+    cat "$MAIN/.agents/koumei/tasks/$base.md" \
+        "$MAIN/.agents/koumei/tasks/$base-full.md" 2>/dev/null \
       | grep '[^[:space:]]' | sort > "$ref"
 
     if [ ! -s "$ref" ]; then
-      printf '⚠️  本体に存在しないタスク定義: %s\n' "$f" >> "$REPORT"
+      printf '⚠️  本体に存在しないタスク定義: %s\n' "$f" >> "$STRAY"
     else
       # comm による多重集合差分。行の「既出／未出」ではなく出現回数で見るため、
       # 定型行だけで構成された迷子も、失われた行数も取りこぼさない
       lost=$(grep '[^[:space:]]' "$f" | sort | comm -23 - "$ref" | wc -l | tr -d ' ')
-      [ "$lost" -gt 0 ] && printf '⚠️  本体へ届いていない記録 %s 行: %s\n' "$lost" "$f" >> "$REPORT"
+      if [ "$lost" -gt 0 ]; then
+        # 素性の判別。処置が正反対になるため、警告を書き分ける
+        if [ -n "$(git -C "$wt" status --porcelain -- "${f#"$wt"/}" 2>/dev/null)" ]; then
+          printf '⚠️  未コミットの記録 %s 行（差し戻し要）: %s\n' "$lost" "$f" >> "$STRAY"
+        else
+          br=$(git -C "$wt" rev-parse --abbrev-ref HEAD 2>/dev/null)
+          printf 'ℹ️  ブランチ上の記録 %s 行（マージ待ち・差し戻し不要）: %s [%s]\n' "$lost" "$f" "$br" >> "$INFO"
+        fi
+      fi
     fi
     rm -f "$ref"
   done
 done
 
-if [ -s "$REPORT" ]; then cat "$REPORT"; rm -f "$REPORT"; false
-else rm -f "$REPORT"; echo "✅ 迷子なし"; fi
+[ -s "$INFO" ] && cat "$INFO"
+if [ -s "$STRAY" ]; then cat "$STRAY"; rm -f "$STRAY" "$INFO"; false
+else rm -f "$STRAY" "$INFO"; echo "✅ 迷子なし"; fi
 ```
 
 検出の原理: **進捗記録は追記のみで育つ**ため、worktree 側の複製に「本体へ届いていない行」が
@@ -131,8 +143,24 @@ else rm -f "$REPORT"; echo "✅ 迷子なし"; fi
 検査が異常終了と区別できるよう、迷子がなければ `✅ 迷子なし` を出して 0 で、
 迷子があれば警告を出して 1 で終わる。`set -e` の下でも途中で黙って止まらない。
 
-**検出したら、失われた記録を本体の正しい位置（時系列順）へ差し戻すこと。**
-断片ファイルは復旧の証跡として残し、内容を本体へ移し終えてから削除する。
+**検出したら、まず素性を見極めること。処置は素性によって正反対になる。**
+
+| 印 | 素性 | 意味 | 処置 |
+|---|---|---|---|
+| ⚠️ | 未コミット | どのブランチにも乗っていない。worktree を失えば行き場がない | **本体の正しい位置（時系列順）へ差し戻す** |
+| ℹ️ | ブランチ上 | そのブランチにコミット済み。マージで本体へ届く | **差し戻してはならない** |
+
+ℹ️ の記録を本体へ書き写すと、マージ後に同じ記録が二度現れる。加えて、追記のみで育つ
+タスク定義を本体とブランチの二箇所で編集することになり、マージ時に必ず衝突する。
+**所在を把握するに留め、本体へ反映したい場合はそのブランチをマージすること。**
+
+⚠️ を差し戻した後、断片ファイルは復旧の証跡として残し、内容を移し終えてから削除する。
+検査は ⚠️ がある場合のみ 1 で終わる。ℹ️ だけなら 0 で終わる（異常ではないため）。
+
+**この検査は、本体からでも worktree の中からでも同じ答えを返す。** 迷子が生まれるのは
+作業ディレクトリが worktree に在るときであり、そこで沈黙する検査は用をなさないためである。
+基準（本体）と走査対象（全 worktree）を別に求めているのはこのためで、
+`git rev-parse --show-toplevel` を基準に使ってはならない（worktree 内では worktree 自身を返す）。
 
 
 ---
