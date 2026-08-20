@@ -89,16 +89,21 @@ Phase 4 の判定・裁定・Phase 5 の実装記録が失われかけた（畳�
 
 ```sh
 ROOT=$(git rev-parse --show-toplevel)
+found=0
 for f in "$ROOT"/.claude/worktrees/*/.agents/koumei/tasks/task-*.md; do
   [ -f "$f" ] || continue
   base=$(basename "$f" .md); case "$base" in *-full) continue;; esac
   full="$ROOT/.agents/koumei/tasks/$base-full.md"
   main="$ROOT/.agents/koumei/tasks/$base.md"
   [ -f "$full" ] && ref="$full" || ref="$main"
-  [ -f "$ref" ] || { echo "⚠️  本体に存在しないタスク定義: $f"; continue; }
+  [ -f "$ref" ] || { echo "⚠️  本体に存在しないタスク定義: $f"; found=1; continue; }
   lost=$(grep -vxFf "$ref" "$f" 2>/dev/null | grep -c '[^[:space:]]')
-  [ "$lost" -gt 0 ] && echo "⚠️  本体へ届いていない記録 ${lost} 行: $f"
+  if [ "$lost" -gt 0 ]; then
+    echo "⚠️  本体へ届いていない記録 ${lost} 行: $f"
+    found=1
+  fi
 done
+[ "$found" -eq 0 ] && echo "✅ 迷子なし"
 ```
 
 検出の原理: **進捗記録は追記のみで育つ**ため、worktree 側の複製に「本体に無い行」が
