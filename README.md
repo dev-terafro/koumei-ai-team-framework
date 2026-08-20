@@ -145,8 +145,8 @@ setup.sh --dry-run     # 実際にファイルを作成せずプレビュー
 │   ├── koumei/                     ← 最高指揮者（tasks/ reports/ requests/）
 │   ├── tech-lead/                  ← instructions/ deliverables/
 │   ├── devils-advocate/            ← instructions/ reviews/
-│   ├── analyst/ inquisitor/        ← オプションロール
-│   ├── ux-designer/ scribe/        ←
+│   ├── analyst/ inquisitor/        ← オプションロール（roles 有効時のみ生成）
+│   ├── ux-designer/ scribe/        ←   scribe は成果物の圧縮・構造化を担う主簿
 │   ├── task-manager/               ← マルチタスク実行役（claude時）
 │   └── custom-roles/               ← カスタムロールテンプレート
 └── docs-official/                  ← 公式ドキュメント（output.dir で変更可）
