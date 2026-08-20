@@ -30,6 +30,7 @@ roles:
   # - analyst                        # 既存コード分析担当
   # - inquisitor                     # 設計前の詰問担当（諫議大夫）
   # - ux-designer                    # UI/UX設計担当
+  # - scribe                         # 成果物の圧縮・構造化担当（主簿）
 
 # === スキルコマンド設定 ===
 # 対象CLI: "claude"（.claude/skills + CLAUDE.md）または "codex"（.codex/skills + AGENTS.md）または "antigravity"（.agents/skills + AGENTS.md）
@@ -49,6 +50,7 @@ commander:
 # - tech-lead-design: 設計ミスは実装で増幅される → 最上位モデル
 # - inquisitor: 「何を問わなかったか」は誰にも検知できない。問いの質が下流の設計精度を決める → 最上位モデル
 # - tech-lead-implement: トークン量が多い → 1段下のモデル（または agy などの外部CLI委譲）
+# - scribe: 要約・選別は理解を要し、取りこぼしは下流で検知できない → 中位モデル（haiku は重い資料の書き出しで停止する実測あり）
 # 指定可能な値: haiku / sonnet / opus / fable（またはフルモデルID）、TEAM.md の外部CLIモデル定義に登録した名前（agy / codex 等）
 models:
   koumei: "sonnet"
@@ -58,6 +60,7 @@ models:
   tech-lead-design: "fable"
   tech-lead-implement: "opus"
   devils-advocate: "fable"
+  scribe: "sonnet"
 
 # === レビュー設定 ===
 review:
@@ -117,6 +120,8 @@ custom_instructions:
   inquisitor: ""  # プロジェクト固有の詰問観点（複数行は | ブロック形式で）
                   # 記入例: - 課金・請求に関わる論点は必ずリスク「高」として扱うこと
   ux-designer: ""
+  scribe: ""      # プロジェクト固有の圧縮・構造化ルール（複数行は | ブロック形式で）
+                  # 記入例: - 監査要件に関わる記述は appendix へ送らず必ず本文に残すこと
 
 # === 参照ドキュメント ===
 # 各ロールが参照すべきドキュメントのリスト

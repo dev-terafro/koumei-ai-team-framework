@@ -158,6 +158,20 @@ wizard_select_roles() {
   fi
 
   echo ""
+
+  # scribe
+  echo -e "  ${YELLOW}scribe${NC} … 成果物の圧縮・構造化・差分パッケージ作成を担う主簿"
+  echo -e "           トークン経済ルールの執行実務を担当。20KB超の成果物の再編、"
+  echo -e "           2回目レビュー用の差分パッケージ作成、タスク定義の畳み込みを行う。"
+  echo -e "           成果物が重くなる大規模タスク・夜間の全自動実行で特に有用。"
+  if prompt_yn "  scribe を有効にしますか？"; then
+    WIZARD_SELECTED_ROLES+=("scribe")
+    echo -e "  → ${GREEN}✅ 有効${NC}"
+  else
+    echo -e "  → ☐ 無効"
+  fi
+
+  echo ""
   echo -e "選択されたロール: ${GREEN}${WIZARD_SELECTED_ROLES[*]}${NC}"
 }
 
@@ -589,6 +603,7 @@ models:
   tech-lead-design: "${wizard_design_model}"
   tech-lead-implement: "${wizard_impl_model}"
   devils-advocate: "${wizard_design_model}"
+  scribe: "${wizard_default_model}"
 
 # === レビュー設定 ===
 review:
@@ -633,6 +648,7 @@ custom_instructions:
   analyst: ""
   inquisitor: ""
   ux-designer: ""
+  scribe: ""
 
 # === 参照ドキュメント ===
 reference_docs: []
@@ -1034,6 +1050,7 @@ load_config() {
   MODEL_TECH_LEAD_DESIGN=$(yaml_get "models.tech-lead-design")
   MODEL_TECH_LEAD_IMPLEMENT=$(yaml_get "models.tech-lead-implement")
   MODEL_DEVILS_ADVOCATE=$(yaml_get "models.devils-advocate")
+  MODEL_SCRIBE=$(yaml_get "models.scribe")
   case "$TARGET_CLI" in
     codex)
       MODEL_KOUMEI="${MODEL_KOUMEI:-gpt-5.3-codex}"
@@ -1043,6 +1060,7 @@ load_config() {
       MODEL_TECH_LEAD_DESIGN="${MODEL_TECH_LEAD_DESIGN:-gpt-5.3-codex}"
       MODEL_TECH_LEAD_IMPLEMENT="${MODEL_TECH_LEAD_IMPLEMENT:-gpt-5.3-codex}"
       MODEL_DEVILS_ADVOCATE="${MODEL_DEVILS_ADVOCATE:-gpt-5.3-codex}"
+      MODEL_SCRIBE="${MODEL_SCRIBE:-gpt-5.3-codex}"
       ;;
     antigravity)
       MODEL_KOUMEI="${MODEL_KOUMEI:-gemini-3.5-pro}"
@@ -1052,6 +1070,7 @@ load_config() {
       MODEL_TECH_LEAD_DESIGN="${MODEL_TECH_LEAD_DESIGN:-gemini-3.5-pro}"
       MODEL_TECH_LEAD_IMPLEMENT="${MODEL_TECH_LEAD_IMPLEMENT:-gemini-3.5-pro}"
       MODEL_DEVILS_ADVOCATE="${MODEL_DEVILS_ADVOCATE:-gemini-3.5-pro}"
+      MODEL_SCRIBE="${MODEL_SCRIBE:-gemini-3.5-pro}"
       ;;
     *)
       MODEL_KOUMEI="${MODEL_KOUMEI:-sonnet}"
@@ -1061,6 +1080,9 @@ load_config() {
       MODEL_TECH_LEAD_DESIGN="${MODEL_TECH_LEAD_DESIGN:-fable}"
       MODEL_TECH_LEAD_IMPLEMENT="${MODEL_TECH_LEAD_IMPLEMENT:-opus}"
       MODEL_DEVILS_ADVOCATE="${MODEL_DEVILS_ADVOCATE:-fable}"
+      # scribe: 要約・選別は理解を要し、取りこぼしは下流で検知できない。
+      # 重い資料の書き出しで軽量モデルが停止する実測（token-economy.md 定め7）もあるため haiku は避ける
+      MODEL_SCRIBE="${MODEL_SCRIBE:-sonnet}"
       ;;
   esac
 
@@ -1128,6 +1150,7 @@ load_config() {
   CUSTOM_INSTRUCTIONS_ANALYST=$(yaml_get_multiline "custom_instructions" "analyst")
   CUSTOM_INSTRUCTIONS_INQUISITOR=$(yaml_get_multiline "custom_instructions" "inquisitor")
   CUSTOM_INSTRUCTIONS_UX_DESIGNER=$(yaml_get_multiline "custom_instructions" "ux-designer")
+  CUSTOM_INSTRUCTIONS_SCRIBE=$(yaml_get_multiline "custom_instructions" "scribe")
 
   # 参照ドキュメント
   REFERENCE_DOCS=""
@@ -1168,6 +1191,7 @@ load_config() {
   export KOUMEI_VAR_MODEL_TECH_LEAD_DESIGN="$MODEL_TECH_LEAD_DESIGN"
   export KOUMEI_VAR_MODEL_TECH_LEAD_IMPLEMENT="$MODEL_TECH_LEAD_IMPLEMENT"
   export KOUMEI_VAR_MODEL_DEVILS_ADVOCATE="$MODEL_DEVILS_ADVOCATE"
+  export KOUMEI_VAR_MODEL_SCRIBE="$MODEL_SCRIBE"
   export KOUMEI_VAR_REVIEW_MODE="$REVIEW_MODE"
   export KOUMEI_VAR_REVIEW_TIMEOUT="$REVIEW_TIMEOUT"
   export KOUMEI_VAR_GRILLING_MAX_ROUNDS="$GRILLING_MAX_ROUNDS"
@@ -1228,6 +1252,8 @@ CONFIG_ROLE_CONDITIONAL_KEYS=(
   "inquisitor:grilling.escalate"
   "ux-designer:models.ux-designer"
   "ux-designer:custom_instructions.ux-designer"
+  "scribe:models.scribe"
+  "scribe:custom_instructions.scribe"
 )
 
 # 差分がなければ0、差分があれば1を返し、案内メッセージを表示する
@@ -1680,10 +1706,10 @@ do_setup() {
 
   # ロール展開（コア: koumei/tech-lead/devils-advocate、オプション: analyst/ux-designer、
   # task-manager はネストsubagent前提のため claude ターゲット限定）
-  for role_dir in koumei tech-lead devils-advocate analyst inquisitor ux-designer task-manager; do
+  for role_dir in koumei tech-lead devils-advocate analyst inquisitor ux-designer scribe task-manager; do
     case "$role_dir" in
-      analyst|inquisitor|ux-designer) has_role "$role_dir" || continue ;;
-      task-manager)                   [[ "$TARGET_CLI" == "claude" || "$TARGET_CLI" == "antigravity" ]] || continue ;;
+      analyst|inquisitor|ux-designer|scribe) has_role "$role_dir" || continue ;;
+      task-manager)                          [[ "$TARGET_CLI" == "claude" || "$TARGET_CLI" == "antigravity" ]] || continue ;;
     esac
 
     local tmpl="${TEMPLATES_DIR}/agents/${role_dir}/CLAUDE.md.tmpl"
@@ -1700,6 +1726,7 @@ do_setup() {
         analyst)         ci="$CUSTOM_INSTRUCTIONS_ANALYST" ;;
         inquisitor)      ci="$CUSTOM_INSTRUCTIONS_INQUISITOR" ;;
         ux-designer)     ci="$CUSTOM_INSTRUCTIONS_UX_DESIGNER" ;;
+        scribe)          ci="$CUSTOM_INSTRUCTIONS_SCRIBE" ;;
       esac
       if [[ -n "$ci" ]]; then
         content+=$'\n\n'"## プロジェクト固有の指示"$'\n\n'"$ci"
@@ -1752,6 +1779,7 @@ do_setup() {
       koumei-analyze)                 has_role "analyst" || should_install=false ;;
       koumei-grill)                   has_role "inquisitor" || should_install=false ;;
       koumei-design|koumei-design-ux) has_role "ux-designer" || should_install=false ;;
+      koumei-condense)                has_role "scribe" || should_install=false ;;
     esac
     $should_install || continue
 
@@ -1865,6 +1893,9 @@ do_setup() {
   if has_role "ux-designer"; then
     log_info "  /${SKILL_PREFIX}-design    UX+技術設計（並列実行）"
     log_info "  /${SKILL_PREFIX}-design-ux UX設計（単体実行）"
+  fi
+  if has_role "scribe"; then
+    log_info "  /${SKILL_PREFIX}-condense  成果物の圧縮・構造化（主簿）"
   fi
   log_info "  /${SKILL_PREFIX}-design-tech 技術設計"
   log_info "  /${SKILL_PREFIX}-review    レビュー（--security / --second-opinion / --model 対応）"

@@ -24,13 +24,14 @@
 
 ## roles
 
-コアロール（`koumei` / `tech-lead` / `devils-advocate`）は必須。オプションロール（`analyst` / `inquisitor` / `ux-designer`）は記載時のみ有効化され、対応するスキル（`-analyze` / `-grill` / `-design` / `-design-ux`）・ワークスペース・TEAM.md の記載が展開される。無効ロールのフェーズはワークフロー上自動的にスキップされる。
+コアロール（`koumei` / `tech-lead` / `devils-advocate`）は必須。オプションロール（`analyst` / `inquisitor` / `ux-designer` / `scribe`）は記載時のみ有効化され、対応するスキル（`-analyze` / `-grill` / `-design` / `-design-ux` / `-condense`）・ワークスペース・TEAM.md の記載が展開される。無効ロールのフェーズはワークフロー上自動的にスキップされる。
 
 | ロール | 有効化で追加されるもの |
 |--------|--------------------|
 | `analyst` | Phase 1（分析）・Phase 2（分析レビュー）、`/koumei-analyze` |
 | `inquisitor` | **Phase 2.5（詰問）**、`/koumei-grill`、`grilling` 設定ブロック |
 | `ux-designer` | Phase 3 の UX設計、`/koumei-design`・`/koumei-design-ux` |
+| `scribe` | フェーズ完了時のガードレール検査で主簿が起動（20KB超の再編・差分パッケージ・タスク定義の畳み込み）、`/koumei-condense`。無効時は指揮者本体がトークン経済の定めを直接運用する |
 
 ## target_cli / skill_prefix
 
@@ -58,6 +59,7 @@ tech-lead は**フェーズ分割**（設計と実装で別モデル）。配置
 | `tech-lead-design` | **fable** | 設計ミスは実装で増幅されるため最上位 |
 | `tech-lead-implement` | **opus** | トークン量が多いため1段下 |
 | `devils-advocate` | **fable** | レビューVERDICTは品質ゲート。誤判定コストが最大 |
+| `scribe` | sonnet | 要約・選別は原文の理解を要し、取りこぼしは下流で検知できない。haiku は重い資料の書き出しで停止する実測があるため充てない |
 
 指定可能な値: `haiku` / `sonnet` / `opus` / `fable`（またはフルモデルID）、および TEAM.md「外部CLIモデル定義」に登録した外部モデル名（`agy` / `agy-pro` / `codex` / `grok` 等。この場合 Agent tool ではなく Bash 経由で起動される）。
 
@@ -124,7 +126,7 @@ AIがコードを書く際に従う技術情報と、実装後の検証コマン
 
 ## custom_instructions
 
-ロール別のプロジェクト固有指示。生成される各ロールの役割定義ファイル末尾に「プロジェクト固有の指示」として追記される。キー: `koumei` / `tech-lead` / `devils-advocate` / `analyst` / `inquisitor` / `ux-designer`。
+ロール別のプロジェクト固有指示。生成される各ロールの役割定義ファイル末尾に「プロジェクト固有の指示」として追記される。キー: `koumei` / `tech-lead` / `devils-advocate` / `analyst` / `inquisitor` / `ux-designer` / `scribe`。
 
 `inquisitor` には「このプロジェクトで特に詰めるべき論点」を書くとよい（例: `- 課金・請求に関わる論点は必ずリスク「高」として扱うこと`）。過去に手戻りが起きた領域を書いておくと、同じ穴を繰り返さなくなる。
 
