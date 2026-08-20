@@ -2,7 +2,7 @@
 name: {{SKILL_PREFIX}}-review
 description: 成果物またはコードのレビューを実行する。レビューフェーズを自動判定し、devils-advocateエージェントにレビューを委譲する。
 {{#IF_CLI claude}}
-argument-hint: "[タスクID] [--security] [--second-opinion] [--model codex|lmstudio|grok|claude]"
+argument-hint: "[タスクID] [--security] [--second-opinion] [--model codex|lmstudio|grok|agy|claude]"
 disable-model-invocation: true
 {{/IF_CLI}}
 ---

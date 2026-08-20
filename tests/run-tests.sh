@@ -56,6 +56,7 @@ for f in "${REPO_DIR}"/templates/hooks/*.sh; do
   assert "$(basename "$f") の bash 構文" bash -n "$f"
 done
 assert "settings.json が正しい JSON" jq empty "${REPO_DIR}/templates/claude/settings.json"
+assert "hooks.json が正しい JSON" jq empty "${REPO_DIR}/templates/agents/hooks.json"
 
 # ------------------------------------------------------------
 echo ""
@@ -222,8 +223,10 @@ make_project "$WORK_DIR/t7" 's/^target_cli: "claude"/target_cli: "antigravity"/'
 bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行"
 assert "スキルは .agents/skills に配置" test -d .agents/skills/koumei-start
 assert "ロール定義は AGENTS.md" test -f .agents/koumei/AGENTS.md
-assert_not "hooks 未配布" test -d hooks
-assert_not "multi-task.md 未生成（claude限定機能）" test -f .agents/skills/koumei-start/docs/multi-task.md
+assert "hooks が配布されている" test -d hooks
+assert "hooks.json が生成されている" test -f .agents/hooks.json
+assert "task-manager が生成されている" test -f .agents/task-manager/AGENTS.md
+assert "multi-task.md が生成されている" test -f .agents/skills/koumei-start/docs/multi-task.md
 assert_not "実行手順書に Agent tool 参照なし（Claude Code固有機構、issue#13）" grep -rq "Agent tool" .agents/skills
 assert_not "実行手順書に AskUserQuestion 参照なし（Claude Code固有機構）" grep -rq "AskUserQuestion" .agents/skills
 assert "grill スキルが生成されている（上の再帰grepを空振りさせない）" test -f .agents/skills/koumei-grill/SKILL.md
@@ -244,6 +247,15 @@ assert "log-operation: tool_name を記録" grep -q '"tool":"Bash"' .agents/logs
 assert "log-operation: command を記録" grep -q '"target":"npm test"' .agents/logs/*.jsonl
 out=$(echo '{"tool_name":"Write","tool_input":{"file_path":"design.md"}}' | bash hooks/auto-format.sh; echo "exit=$?")
 assert "auto-format: .md はスキップして正常終了" grep -q "exit=0" <<<"$out"
+
+# Antigravity 形式の stdin JSON テスト
+out=$(echo '{"toolCall":{"name":"write_to_file","args":{"TargetFile":".agents/TEAM.md"}},"workspacePaths":["'$PWD'"]}' | bash hooks/quality-gate.sh 2>&1; echo "exit=$?")
+assert "quality-gate (Antigravity): TEAM.md をブロック (exit 2)" grep -q "exit=2" <<<"$out"
+out=$(echo '{"toolCall":{"name":"write_to_file","args":{"TargetFile":"src/index.ts"}},"workspacePaths":["'$PWD'"]}' | bash hooks/quality-gate.sh 2>&1; echo "exit=$?")
+assert "quality-gate (Antigravity): 通常ファイルは許可 (exit 0)" grep -q "exit=0" <<<"$out"
+echo '{"toolCall":{"name":"run_command","args":{"CommandLine":"pytest"}},"workspacePaths":["'$PWD'"]}' | bash hooks/log-operation.sh
+assert "log-operation (Antigravity): toolCall.name を記録" grep -q '"tool":"run_command"' .agents/logs/*.jsonl
+assert "log-operation (Antigravity): CommandLine を記録" grep -q '"target":"pytest"' .agents/logs/*.jsonl
 
 # ------------------------------------------------------------
 echo ""

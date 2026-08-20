@@ -2,9 +2,9 @@
 # {{COMMANDER_NAME}}エージェントチーム — フェーズ完了通知
 # PostToolUse(Write) で呼ばれ、成果物ファイルの書き込みを検知して通知
 
-# Claude Code はフック情報を stdin の JSON で渡す（環境変数ではない）
+# Claude Code / Antigravity はフック情報を stdin の JSON で渡す（環境変数ではない）
 INPUT=$(cat)
-FILE_PATH=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null)
+FILE_PATH=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // .toolCall.args.TargetFile // empty' 2>/dev/null)
 
 if [ -z "$FILE_PATH" ]; then
   exit 0

@@ -14,8 +14,9 @@
 - **レビュアーの独立性**: 自己レビュー禁止を絶対ルールとし、独立エージェント/外部モデルでレビューを実行
 - **フェーズ別モデル配置**: 高単価モデルを「判断のレバレッジが高い所」（設計・レビュー判定）に配置（tech-lead は設計/実装でモデル分割）
 - **レビュー拡張**: `--security`（OWASP+STRIDE監査）/ `--second-opinion`（外部モデル突合）/ `--model`（一時切替）/ タイムアウトフォールバック
-- **マルチタスク並列実行**: `--multi` で「1タスク=1ブランチ=1PR」を git worktree で並列実行（claude限定）
-- **Hooks**: TEAM.md 保護・操作ログ・自動フォーマット・フェーズ完了通知（claude限定）
+- **マルチタスク並列実行**: `--multi` で「1タスク=1ブランチ=1PR」を git worktree で並列実行（claude / antigravity 対応）
+- **Hooks**: TEAM.md 保護・操作ログ・自動フォーマット・フェーズ完了通知（claude / antigravity 対応）
+- **クロスCLI・外部委譲**: Claude CLI から Antigravity（agy）や Codex へ実装フェーズを安全に委譲（worktree 隔離・レートリミット時の自動引き継ぎ・フォールバック機能付き）
 - **config 駆動の更新機構**: `--update` はスキーマ差分を検知し、必要なら `--reconfig` を案内
 - **マルチCLI対応**: `target_cli` で claude / codex / antigravity に展開（機能マトリクスは後述）
 
@@ -91,7 +92,7 @@ setup.sh --dry-run     # 実際にファイルを作成せずプレビュー
 9. /koumei-status              → 進捗確認・次のアクション提案
 ```
 
-- `--manual` で手動進行、`--multi` でマルチタスク並列実行（claude限定）
+- `--manual` で手動進行、`--multi` でマルチタスク並列実行（claude / antigravity 対応）
 - `/koumei-grill` は既定で**一問一答**（人が回答）。全自動フローでは `--auto` で起動し、AIが根拠に基づいて自答する
 - タスク種別（軽微修正/バグ修正/機能追加）に応じてフェーズを自動省略（コードレビューは常に実施）
 - 差し戻しはフェーズ別に最大2回、3回目でユーザーにエスカレーション
@@ -102,11 +103,20 @@ setup.sh --dry-run     # 実際にファイルを作成せずプレビュー
 |---|---|---|---|
 | コアワークフロー・ロール・ペルソナ | ✅ | ✅ | ✅ |
 | レビュアー独立実行・外部CLIモデル | ✅ | ✅ | ✅ |
-| Hooks（TEAM.md保護/ログ/フォーマット/通知） | ✅ | ❌ | ❌ |
+| Hooks（TEAM.md保護/ログ/フォーマット/通知） | ✅ | ❌ | ✅ |
 | セカンドオピニオン / タイムアウトFB | ✅ | △ | △ |
-| マルチタスク（--multi / worktree並列） | ✅ | ❌ | ❌ |
+| マルチタスク（--multi / worktree並列） | ✅ | ❌ | ✅ |
 
-フル体験は claude ターゲット。codex / antigravity はコアワークフローのみサポートします。
+フル体験は claude および antigravity ターゲット（codex はコアワークフローのみ）。
+
+## ターゲットCLI別の実行フロー・ロール遷移
+
+各ターゲット環境に応じたエージェント起動・ロールバトンタッチの詳細は [docs/target-cli-flows.md](docs/target-cli-flows.md) を参照してください。
+
+- **`claude` (Claude Code)**: `Agent` ツールによる自律サブエージェント呼び出し。ロールごとに異なるモデル（Fable/Opus/Sonnet）を起動し、`.claude/settings.json` の Hooks で安全性を担保。
+- **`antigravity` (Antigravity / `agy`)**: `invoke_subagent` ツールによるサブエージェント起動。`TEAM.md` のモデル定義から `pro` / `flash` の階層を動的に解決。`Subagents` 配列によるネイティブ並列マルチタスクと `.agents/hooks.json` に対応。
+- **`codex` (Codex CLI)**: サブエージェントネストを持たないため、単一セッション内でロール定義（`AGENTS.md`）を順次読み替えながら直列実行。
+- **クロスCLI・ハイブリッド連携**: Claude CLI を司令塔（設計・オーケストレーション・レビュー）とし、最もトークンを消費する実装フェーズ（Phase 5）のみを `git worktree` 内で `agy`（Gemini）に委譲。レートリミット（429）検知時の自律引き継ぎ・フォールバックを完備。
 
 ## 成果物の配置（2層構成）
 

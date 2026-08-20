@@ -1,0 +1,43 @@
+{
+  "koumei-hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "write_to_file|replace_file_content",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"../hooks/quality-gate.sh\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"../hooks/log-operation.sh\"",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "write_to_file|replace_file_content",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"../hooks/auto-format.sh\"",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "bash \"../hooks/notify-phase.sh\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

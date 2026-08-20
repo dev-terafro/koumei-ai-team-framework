@@ -7,7 +7,7 @@ description: {{COMMANDER_NAME}}として新しいタスクを開始する。全�
 description: {{COMMANDER_NAME}}として新しいタスクを開始する。全自動/順次モードを選択し、要件定義からPR作成までを統括する。
 {{/IF_CLI}}
 {{#IF_CLI antigravity}}
-description: {{COMMANDER_NAME}}として新しいタスクを開始する。全自動/順次モードを選択し、要件定義からPR作成までを統括する。
+description: {{COMMANDER_NAME}}として新しいタスクを開始する。全自動/順次/マルチタスクモードを選択し、要件定義からPR作成までを統括する。
 {{/IF_CLI}}
 {{#IF_CLI claude}}
 argument-hint: "{要件テキスト} [--manual] [--multi]"
@@ -56,7 +56,10 @@ allowed-tools: Read Write Glob Grep Bash Edit Agent AskUserQuestion
 2. **`--manual` が含まれない場合** → ユーザーに選択肢を提示して確認する（提示方法はCLIに依存）:
 {{/IF_CLI}}
 {{#IF_CLI antigravity}}
-2. **`--manual` が含まれない場合** → ユーザーに選択肢を提示して確認する（提示方法はCLIに依存）:
+2. **`--multi` が含まれる場合** → マルチタスクモード（[docs/multi-task.md](docs/multi-task.md) の手順で実行）
+3. **どちらも含まれない場合** → ユーザーに選択肢を提示して確認する:
+
+※ 要件テキストに独立した複数の要求が含まれると判断した場合は、選択肢にマルチタスクモードを加えて提示すること。
 {{/IF_CLI}}
 
 ```
