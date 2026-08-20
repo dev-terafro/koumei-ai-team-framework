@@ -109,6 +109,15 @@ setup.sh --dry-run     # 実際にファイルを作成せずプレビュー
 
 フル体験は claude および antigravity ターゲット（codex はコアワークフローのみ）。
 
+## ターゲットCLI別の実行フロー・ロール遷移
+
+各ターゲット環境に応じたエージェント起動・ロールバトンタッチの詳細は [docs/target-cli-flows.md](docs/target-cli-flows.md) を参照してください。
+
+- **`claude` (Claude Code)**: `Agent` ツールによる自律サブエージェント呼び出し。ロールごとに異なるモデル（Fable/Opus/Sonnet）を起動し、`.claude/settings.json` の Hooks で安全性を担保。
+- **`antigravity` (Antigravity / `agy`)**: `invoke_subagent` ツールによるサブエージェント起動。`TEAM.md` のモデル定義から `pro` / `flash` の階層を動的に解決。`Subagents` 配列によるネイティブ並列マルチタスクと `.agents/hooks.json` に対応。
+- **`codex` (Codex CLI)**: サブエージェントネストを持たないため、単一セッション内でロール定義（`AGENTS.md`）を順次読み替えながら直列実行。
+- **クロスCLI・ハイブリッド連携**: Claude CLI を司令塔（設計・オーケストレーション・レビュー）とし、最もトークンを消費する実装フェーズ（Phase 5）のみを `git worktree` 内で `agy`（Gemini）に委譲。レートリミット（429）検知時の自律引き継ぎ・フォールバックを完備。
+
 ## 成果物の配置（2層構成）
 
 - **作業成果物**（分析・設計・レビュー・完了報告）: `.agents/{ロール}/deliverables/` 等の各ワークスペース（AI内部の作業記録・タスク単位で上書き）
