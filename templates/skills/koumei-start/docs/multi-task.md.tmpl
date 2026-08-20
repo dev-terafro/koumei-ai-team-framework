@@ -4,9 +4,9 @@
 
 ## 前提条件
 
-- Claude Code v2.1.172 以降（サブエージェントがサブエージェントを起動できること）
+- サブエージェント起動機能が利用可能なこと（Claude Code v2.1.172 以降、または Antigravity CLI）
 - リポジトリで git worktree が使用可能なこと
-- `.agents/` と `.claude/` がリポジトリにコミットされていること（worktree 内で参照するため）
+- `.agents/`（および CLI 設定フォルダ）がリポジトリにコミットされていること（worktree 内で参照するため）
 
 前提を満たさない場合はその旨を報告し、通常の全自動モードで直列実行するかユーザーに確認する。
 
@@ -28,7 +28,12 @@
 - 独立なタスクは並列グループにまとめる
 
 ### 4. 計画の承認
+{{#IF_CLI claude}}
 AskUserQuestion で分割計画（タスク一覧・種別・並列/直列グループ）を提示し、ユーザーの承認を得る:
+{{/IF_CLI}}
+{{#IF_CLI antigravity}}
+分割計画（タスク一覧・種別・並列/直列グループ）を提示し、ユーザーの承認を得る:
+{{/IF_CLI}}
 
 ```
 軍を分け、複数の戦線を同時に進める策を立て申した。
@@ -37,7 +42,13 @@ AskUserQuestion で分割計画（タスク一覧・種別・並列/直列グル
 
 ## 実行: task-manager の起動
 
-並列グループごとに、**1つのメッセージ内で全タスク分の Agent tool 呼び出しを同時に行う**。
+並列グループごとに、各タスクを同時に起動する:
+{{#IF_CLI claude}}
+- **Claude の場合**: 1つのメッセージ内で全タスク分の Agent tool 呼び出しを同時に行う。
+{{/IF_CLI}}
+{{#IF_CLI antigravity}}
+- **Antigravity の場合**: `invoke_subagent` ツールを一度呼び出し、`Subagents` 配列に各タスクの定義（`TypeName: "self"`, `Role: "task-manager (task-{番号})"`）を含めて同時に起動する。
+{{/IF_CLI}}
 
 各 task-manager のプロンプトに含める内容:
 - `.agents/task-manager/{{AGENT_INSTRUCTIONS_FILENAME}}` の全文
@@ -63,7 +74,7 @@ AskUserQuestion で分割計画（タスク一覧・種別・並列/直列グル
 ```
 
 - **COMPLETED**: PR URL を一覧化する
-- **HALTED**: DETAIL に記載された判断事項を AskUserQuestion でまとめてユーザーに諮る（続行 / 手動修正 / 中止）
+- **HALTED**: DETAIL に記載された判断事項をまとめてユーザーに諮る（続行 / 手動修正 / 中止）
 - **FAILED**: エラー内容を報告し、該当タスクのみ「停止」扱いとする（他タスクは継続）
 
 ## エラーハンドリング

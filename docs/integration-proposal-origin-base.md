@@ -60,7 +60,7 @@ origin の一部機能は Claude Code 固有機構（Hooks / Agent tool / サブ
 | 外部CLIモデル（grok / gemini 等） | ✅ | ✅（Bash 前提） | ✅（同左） |
 | Hooks（quality-gate / log / auto-format / notify） | ✅ | ❌（Claude Code hooks 固有） | ✅ |
 | セカンドオピニオン / タイムアウトフォールバック | ✅ | △（Bash 呼出部分のみ） | △ |
-| マルチタスク（--multi / task-manager / worktree 並列） | ✅ | ❌（ネストsubagent前提） | ❌ |
+| マルチタスク（--multi / task-manager / worktree 並列） | ✅ | ❌（ネストsubagent前提） | ✅ |
 | フェーズ別モデル指定（Agent tool model param） | ✅ | △（CLI 呼出時の -m 指定等で部分対応） | △ |
 
 - 生成時に `{{#IF_CLI claude}}` で該当セクションごと出し分ける（codex/antigravity 版のスキルには Hooks・マルチタスクの記述自体が入らない）

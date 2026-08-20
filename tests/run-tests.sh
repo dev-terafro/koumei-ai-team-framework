@@ -225,7 +225,8 @@ assert "スキルは .agents/skills に配置" test -d .agents/skills/koumei-sta
 assert "ロール定義は AGENTS.md" test -f .agents/koumei/AGENTS.md
 assert "hooks が配布されている" test -d hooks
 assert "hooks.json が生成されている" test -f .agents/hooks.json
-assert_not "multi-task.md 未生成（claude限定機能）" test -f .agents/skills/koumei-start/docs/multi-task.md
+assert "task-manager が生成されている" test -f .agents/task-manager/AGENTS.md
+assert "multi-task.md が生成されている" test -f .agents/skills/koumei-start/docs/multi-task.md
 assert_not "実行手順書に Agent tool 参照なし（Claude Code固有機構、issue#13）" grep -rq "Agent tool" .agents/skills
 assert_not "実行手順書に AskUserQuestion 参照なし（Claude Code固有機構）" grep -rq "AskUserQuestion" .agents/skills
 assert "grill スキルが生成されている（上の再帰grepを空振りさせない）" test -f .agents/skills/koumei-grill/SKILL.md

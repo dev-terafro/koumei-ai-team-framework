@@ -1683,7 +1683,7 @@ do_setup() {
   for role_dir in koumei tech-lead devils-advocate analyst inquisitor ux-designer task-manager; do
     case "$role_dir" in
       analyst|inquisitor|ux-designer) has_role "$role_dir" || continue ;;
-      task-manager)                   [[ "$TARGET_CLI" == "claude" ]] || continue ;;
+      task-manager)                   [[ "$TARGET_CLI" == "claude" || "$TARGET_CLI" == "antigravity" ]] || continue ;;
     esac
 
     local tmpl="${TEMPLATES_DIR}/agents/${role_dir}/CLAUDE.md.tmpl"
@@ -1769,9 +1769,9 @@ do_setup() {
         [[ -f "$doc_tmpl" ]] || continue
         local doc_name
         doc_name=$(basename "$doc_tmpl" .tmpl)
-        # multi-task.md はネストsubagent前提（task-manager と同じく claude ターゲット限定）
-        if [[ "$doc_name" == "multi-task.md" && "$TARGET_CLI" != "claude" ]]; then
-          # 旧バージョン・target_cli変更前に生成された残骸があれば削除（claude限定機能の陳腐化ファイル）
+        # multi-task.md はネストsubagent/invoke_subagent前提（claude / antigravity ターゲットのみ展開）
+        if [[ "$doc_name" == "multi-task.md" && "$TARGET_CLI" != "claude" && "$TARGET_CLI" != "antigravity" ]]; then
+          # 旧バージョン・target_cli変更前に生成された残骸があれば削除（非対応CLIの陳腐化ファイル）
           [[ -f "${SKILLS_DIR}/${target_name}/docs/${doc_name}" ]] && rm -f "${SKILLS_DIR}/${target_name}/docs/${doc_name}"
           continue
         fi

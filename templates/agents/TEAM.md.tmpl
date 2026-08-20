@@ -186,7 +186,7 @@ Codex CLI 環境では、上記チーム構成表の「モデル」列がその�
 {{#IF_CLI antigravity}}
 #### モデルについて
 
-Antigravity CLI 環境では、上記チーム構成表の「モデル」列がそのまま使われる（判断のレバレッジが高いロールは上位モデル、読み取り中心のロールは軽量モデルという2階層が既定）。Claude Code の Agent tool のようなサブエージェント起動の仕組みは Antigravity CLI 側では検証していないため、外部CLIモデル委譲・レビューモデル切替（`--model` / `--second-opinion`）・セカンドオピニオンは claude ターゲット限定の機能とする。
+Antigravity CLI 環境では、上記チーム構成表の「モデル」列に基づき、サブエージェント起動時に `pro` / `flash` の階層が自動マッピングされる。外部CLIモデル委譲・レビューモデル切替（`--model` / `--second-opinion`）・セカンドオピニオンは claude ターゲット限定の機能とする。
 {{/IF_CLI}}
 
 {{#IF_CLI claude}}
@@ -198,6 +198,17 @@ Antigravity CLI 環境では、上記チーム構成表の「モデル」列が�
 - 各 task-manager は git worktree 内で Phase 1〜7 のパイプラインを完遂し、PR作成まで行う
 - 依存関係・ファイル競合のあるタスクは直列実行される
 - **前提**: Claude Code v2.1.172 以降（サブエージェントのネスト起動）、`.agents/`・`.claude/` がリポジトリにコミットされていること
+- 詳細手順: `{{SKILLS_DIR}}/{{SKILL_PREFIX}}-start/docs/multi-task.md` / 役割定義: `.agents/task-manager/{{AGENT_INSTRUCTIONS_FILENAME}}`
+{{/IF_CLI}}
+{{#IF_CLI antigravity}}
+### マルチタスク実行（オプション）
+
+`/{{SKILL_PREFIX}}-start {要件} --multi` で、独立した複数タスクを並列実行できます。
+
+- {{COMMANDER_NAME}}が要件を複数タスクに分割し、`invoke_subagent` の `Subagents` 配列でタスクごとに **task-manager（部将）** サブエージェントを並列起動
+- 各 task-manager は git worktree 内で Phase 1〜7 のパイプラインを完遂し、PR作成まで行う
+- 依存関係・ファイル競合のあるタスクは直列実行される
+- **前提**: リポジトリで git worktree が使用可能で、`.agents/` がリポジトリにコミットされていること
 - 詳細手順: `{{SKILLS_DIR}}/{{SKILL_PREFIX}}-start/docs/multi-task.md` / 役割定義: `.agents/task-manager/{{AGENT_INSTRUCTIONS_FILENAME}}`
 {{/IF_CLI}}
 
