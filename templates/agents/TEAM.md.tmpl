@@ -74,10 +74,12 @@
 |---------|------------|------|
 | codex | `codex exec "{プロンプト}"` | OpenAI Codex CLI。モデルは `~/.codex/config.toml` の `model` に従う |
 | gpt-5.6-sol | `codex exec -m gpt-5.6-sol "{プロンプト}"` | codex CLI 経由でモデルを固定する例。`-m {モデルID}` で任意のモデルを登録できる |
+| agy | `agy -p "{プロンプト}" --dangerously-skip-permissions` | Google Antigravity CLI。実装委譲時は自動権限スキップで実行 |
+| agy-pro | `agy -p "{プロンプト}" --dangerously-skip-permissions --model "gemini-3.5-pro"` | Antigravity CLI 経由でモデルを明示指定する例 |
 | grok | `grok -p "{プロンプト}"` | xAI Grok CLI（grok-4.5 等）。インストール済みの場合のみ |
 | gemini | `gemini "{プロンプト}"` | Google Gemini CLI |
 
-**サンドボックスの注意**: codex CLI の既定サンドボックスは読み取り専用。**ファイル書き込みを伴う委譲（分析成果物の保存・実装）では `-s workspace-write --full-auto` を追加する**こと（例: `codex exec -s workspace-write --full-auto "{プロンプト}"`）。レビュー・セカンドオピニオンのように標準出力を呼び出し元が受け取って保存する用途では不要。
+**サンドボックスの注意**: codex CLI の既定サンドボックスは読み取り専用。**ファイル書き込みを伴う委譲（分析成果物の保存・実装）では `-s workspace-write --full-auto` を追加する**こと（例: `codex exec -s workspace-write --full-auto "{プロンプト}"`）。agy CLI ではファイル書き込み時に `--dangerously-skip-permissions` を付与する（worktree 内での実行を推奨）。レビュー・セカンドオピニオンのように標準出力を呼び出し元が受け取って保存する用途では不要。
 
 利用可否は CLI 本体の存在（例: `command -v codex`）で確認し、不可の場合は Claude にフォールバックして報告する。
 
