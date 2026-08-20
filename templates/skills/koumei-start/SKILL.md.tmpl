@@ -37,6 +37,7 @@ allowed-tools: Read Write Glob Grep Bash Edit Agent AskUserQuestion
 
 - **レビュー（devils-advocate）は必ず独立した別エージェントで実行すること**（統合禁止）
 - タスク種別（軽微修正/バグ修正小/中/機能追加）でフェーズスキップあり。ただし **Phase 6（コードレビュー）はいかなる種別でもスキップ禁止**
+- **トークン経済の定めに従うこと**（[docs/token-economy.md](docs/token-economy.md)）。成果物は本文20KB上限・プロンプトの資料は「必読最大3点＋参照は§指定」・成果物を作るエージェントには**逐次書き出しを絶対命令として課す**・レビューが食い違いを報告したら差し戻す前に**{{COMMANDER_NAME}} が裁定を下す**
 - サブエージェント起動時は TEAM.md のモデル列をモデル指定に反映する（反映方法はCLIに依存。詳細は [docs/phases.md](docs/phases.md) 冒頭参照）
 
 ---
