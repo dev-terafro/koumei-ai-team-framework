@@ -88,21 +88,23 @@ Phase 4 の判定・裁定・Phase 5 の実装記録が失われかけた（畳�
 **各フェーズの完了時に、次を実行して迷子を検出すること。**
 
 ```sh
-ROOT=$(git rev-parse --show-toplevel)
+# 照合の基準は必ず「本体」。--show-toplevel は worktree 内では worktree 自身を返すため、
+# 本体を指す --git-common-dir から求める。これを誤ると主客が転倒する
+MAIN=$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")
 STRAY=$(mktemp)   # 未コミット＝真の迷子
 INFO=$(mktemp)    # ブランチ上＝マージ待ち
 
 # worktree の在り処は git に問う（.claude/worktrees 以外に作られていても捕捉するため）
 git worktree list --porcelain | sed -n 's/^worktree //p' | while IFS= read -r wt; do
-  [ "$wt" = "$ROOT" ] && continue
+  [ "$wt" = "$MAIN" ] && continue   # 本体は照合の基準そのもの
   for f in "$wt"/.agents/koumei/tasks/task-*.md; do
     [ -f "$f" ] || continue
     base=$(basename "$f" .md); case "$base" in *-full) continue;; esac
 
     # 照合先は「本体 ∪ 原本」。畳み込み後に本体へ追記された記録を誤検出しないため
     ref=$(mktemp)
-    cat "$ROOT/.agents/koumei/tasks/$base.md" \
-        "$ROOT/.agents/koumei/tasks/$base-full.md" 2>/dev/null \
+    cat "$MAIN/.agents/koumei/tasks/$base.md" \
+        "$MAIN/.agents/koumei/tasks/$base-full.md" 2>/dev/null \
       | grep '[^[:space:]]' | sort > "$ref"
 
     if [ ! -s "$ref" ]; then
@@ -154,6 +156,11 @@ else rm -f "$STRAY" "$INFO"; echo "✅ 迷子なし"; fi
 
 ⚠️ を差し戻した後、断片ファイルは復旧の証跡として残し、内容を移し終えてから削除する。
 検査は ⚠️ がある場合のみ 1 で終わる。ℹ️ だけなら 0 で終わる（異常ではないため）。
+
+**この検査は、本体からでも worktree の中からでも同じ答えを返す。** 迷子が生まれるのは
+作業ディレクトリが worktree に在るときであり、そこで沈黙する検査は用をなさないためである。
+基準（本体）と走査対象（全 worktree）を別に求めているのはこのためで、
+`git rev-parse --show-toplevel` を基準に使ってはならない（worktree 内では worktree 自身を返す）。
 
 
 ---
