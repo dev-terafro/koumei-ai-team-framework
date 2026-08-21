@@ -822,6 +822,12 @@ assert_not "phases: 前景で実行させる古い記述が残らない" \
 assert "phases: Codex 委譲も背景実行にする" \
   bash -c 'awk "/^### Codex委譲モード/,/^\*\*実行後/" '"$PH"' | grep -q run_in_background'
 
+# --- ログの置き場（元の欠陥: フックの副作用でしか作られず、委譲ごと失敗した） ---
+assert "生成物に .agents/logs がある" test -d .agents/logs
+assert "phases: agy 委譲が logs を自前で作る" grep -q "mkdir -p .agents/logs" "$PH"
+assert "phases: codex 委譲も logs を自前で作る" \
+  bash -c 'awk "/^### Codex委譲モード/,/^\*\*実行後/" '"$PH"' | grep -q "mkdir -p .agents/logs"'
+
 # --- 成否の判定（status を信じない） ---
 assert "phases: 一次判定が git の差分である" grep -q "git status --porcelain" "$PH"
 assert "phases: status を合否に使うなと明記" grep -q "status\` と終了コードを合否の判定に使ってはならない" "$PH"

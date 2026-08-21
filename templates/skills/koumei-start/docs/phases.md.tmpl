@@ -473,7 +473,7 @@ tech-lead をサブエージェントとして起動する（起動方法はCLI�
 （＝委譲した意味が消える）。背景実行にこの制限は無い。
 
 ```
-cd "$(git rev-parse --show-toplevel)" && \
+cd "$(git rev-parse --show-toplevel)" && mkdir -p .agents/logs && \
 agy -p "{指示プロンプト}" \
     --dangerously-skip-permissions \
     --add-dir "$PWD" \
@@ -524,7 +524,7 @@ agy -p "{指示プロンプト}" \
 **agy委譲モードと同じく、必ず `run_in_background` で起動する**（前景の2分/10分制限を避けるため）。
 
 ```
-cd "$(git rev-parse --show-toplevel)" && \
+cd "$(git rev-parse --show-toplevel)" && mkdir -p .agents/logs && \
 codex exec -s workspace-write --full-auto "{プロンプト}" \
     < /dev/null \
     > .agents/logs/codex-task-{番号}.log 2>&1

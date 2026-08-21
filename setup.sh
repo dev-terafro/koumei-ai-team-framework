@@ -1749,6 +1749,12 @@ do_setup() {
   # --- エージェント定義の展開 ---
   log_step "エージェント定義を展開中..."
 
+  # 操作ログ・外部CLI委譲ログの置き場。従来はフック（log-operation.sh）の副作用で
+  # 実行時に作られていたが、利用者に既存 hooks があるとフックがマージされず、
+  # ディレクトリも作られない。そこへ委譲ログを書こうとして委譲ごと失敗するため、
+  # ターゲットCLIやフックの有無に依らず先に作る。
+  create_dir_with_gitkeep ".agents/logs"
+
   # TEAM.md は純粋な生成ファイル（quality-gate hook が直接編集をブロックし、
   # マルチタスク機能は .agents/ のコミットを要求する）ため、Git 管理下でも強制再生成する
   render_template_file "${TEMPLATES_DIR}/agents/TEAM.md.tmpl" ".agents/TEAM.md" "force"
