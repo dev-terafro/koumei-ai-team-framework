@@ -109,9 +109,38 @@ AIがコードを書く際に従う技術情報と、実装後の検証コマン
 
 | キー | 説明 |
 |------|------|
-| `main_branch` / `develop_branch` | ブランチ運用の既定値（現状エージェントに自動配線されるのは `branch_pattern` のみ。ベース/PR先ブランチは `/koumei-request` の対話で確認される） |
-| `branch_pattern` | 作業ブランチの命名パターン（`{number}` `{summary}` が置換される） |
+| `main_branch` / `develop_branch` | 作業ブランチの**派生元**、および**PRの向け先**。`develop_branch` が空でなければそちらが優先される（空なら `main_branch`）。Phase 0 の分岐と Phase 7 の PR 作成の双方に配線されている |
+| `branch_pattern` | 作業ブランチの命名パターン。`{number}`（チケットキー、無ければタスク番号）／`{summary}`（英小文字ケバブケース）／`{type}`（種別から導出。軽微修正・バグ修正 → `fix`、機能追加/移植 → `feature`）が置換される |
 | `dev_rules` | TEAM.md の開発規約セクションに追記する行（任意）。**`#` や引用符を含む値・複数行は必ず `\|` ブロック形式で**（プレーンスカラーは yq 無し環境で `#` 以降が切り捨てられる） |
+
+## ticket（課題管理システム連携・任意）
+
+無人運転（`/koumei-start --unattended`）で消費される。**セクションごと書かなければ連携は一切行われず、既存プロジェクトはそのまま動く**（`--update` が `--reconfig` を要求することもない）。
+
+**接続手段は枠組みの管轄外。** MCP・CLI・API のいずれであれ、実行環境が備えるものを使う前提とし、ここで定めるのは「どこから引き、いつ何処へ動かすか」のみ。
+
+| キー | 説明 |
+|------|------|
+| `enabled` | `true` で連携する |
+| `queue` | 無人運転が引く行列の条件。**必ず自分の担当に絞ること**（絞らなければ他の担当者のチケットまで夜中に処理してしまう）。空欄のまま `enabled: true` にしても連携は無効として扱われ、警告が出る。**引用符や `#` を含むため必ず `\|` ブロック形式で書く**（プレーンスカラーは yq 無し環境で引用符が剥がれ、検索条件が壊れる） |
+| `status_designing` | 分析・詰問・設計フェーズの間の状態名 |
+| `status_implementing` | 実装・コードレビューフェーズの間の状態名 |
+| `status_review_ready` | AIの作業完了・PR待ちの状態名 |
+| `status_parked` | 待避（AIが判断できず手を止めた）の状態名 |
+
+状態名は**その現場で実際に使われている名**を書く。空欄の項目は遷移させない。
+`status_*` を入れ子（`status:` の下）にしてはならない — yq が無い環境のフォールバックパーサーは2階層までしか読めず、黙って空を返す。
+
+```yaml
+ticket:
+  enabled: true
+  queue: |
+    status = "AI-READY" AND assignee = currentUser()
+  status_designing: "AI-PLANREVIEW"
+  status_implementing: "AI-PROGRESS"
+  status_review_ready: "AI-PR"
+  status_parked: "ペンディング"
+```
 
 ## output（成果物の2層構成）
 
