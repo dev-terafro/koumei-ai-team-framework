@@ -1113,6 +1113,8 @@ load_config() {
   TICKET_STATUS_IMPLEMENTING=$(yaml_get "ticket.status_implementing")
   TICKET_STATUS_REVIEW_READY=$(yaml_get "ticket.status_review_ready")
   TICKET_STATUS_PARKED=$(yaml_get "ticket.status_parked")
+  TICKET_STATUS_STAGING_OK=$(yaml_get "ticket.status_staging_ok")
+  TICKET_STATUS_STAGING_NG=$(yaml_get "ticket.status_staging_ng")
   if [[ "$TICKET_ENABLED" == "true" ]]; then
     # 行列の絞り込みを欠いた連携は、他人のチケットまで夜中に拾う。有効化させない
     if [[ -z "$TICKET_QUEUE" ]]; then
@@ -1121,6 +1123,18 @@ load_config() {
     fi
   else
     TICKET_ENABLED="false"
+  fi
+
+  # STAGING確認の判定は「合格・不合格・保留」の三つの行き先を持つ。
+  # 三つ揃ってはじめて状態遷移の指示として書ける。一つでも欠ければ
+  # 「**  ** へ移す」という空の指示が生成物に出てしまうため、
+  # その場合は判定を一般形（その現場の言葉で書く）のまま出す。
+  TICKET_STAGING_ENABLED="false"
+  if [[ "$TICKET_ENABLED" == "true" \
+        && -n "$TICKET_STATUS_STAGING_OK" \
+        && -n "$TICKET_STATUS_STAGING_NG" \
+        && -n "$TICKET_STATUS_PARKED" ]]; then
+    TICKET_STAGING_ENABLED="true"
   fi
 
   # 開発規約の追加行（任意）
@@ -1212,6 +1226,8 @@ load_config() {
   export KOUMEI_VAR_TICKET_STATUS_IMPLEMENTING="$TICKET_STATUS_IMPLEMENTING"
   export KOUMEI_VAR_TICKET_STATUS_REVIEW_READY="$TICKET_STATUS_REVIEW_READY"
   export KOUMEI_VAR_TICKET_STATUS_PARKED="$TICKET_STATUS_PARKED"
+  export KOUMEI_VAR_TICKET_STATUS_STAGING_OK="$TICKET_STATUS_STAGING_OK"
+  export KOUMEI_VAR_TICKET_STATUS_STAGING_NG="$TICKET_STATUS_STAGING_NG"
   export KOUMEI_VAR_MODEL_KOUMEI="$MODEL_KOUMEI"
   export KOUMEI_VAR_MODEL_ANALYST="$MODEL_ANALYST"
   export KOUMEI_VAR_MODEL_INQUISITOR="$MODEL_INQUISITOR"
@@ -1460,6 +1476,7 @@ process_conditions() {
     my $has_check = length($ARGV[3]) > 0 ? 1 : 0;
     my $target_cli = $ARGV[5] // "";
     my $has_ticket = ($ARGV[6] // "") eq "true" ? 1 : 0;
+    my $has_ticket_staging = ($ARGV[7] // "") eq "true" ? 1 : 0;
 
     open(my $fh, "<", $ARGV[4]) or die "Cannot open: $!";
     my @lines = <$fh>;
@@ -1543,6 +1560,26 @@ process_conditions() {
         next;
       }
 
+      # {{#IF_TICKET_STAGING}}
+      if ($line =~ /\{\{#IF_TICKET_STAGING\}\}/) {
+        if (@skip_stack && $skip_stack[-1]) {
+          push @skip_stack, 1;
+        } else {
+          push @skip_stack, $has_ticket_staging ? 0 : 1;
+        }
+        next;
+      }
+
+      # {{#IF_NO_TICKET_STAGING}}
+      if ($line =~ /\{\{#IF_NO_TICKET_STAGING\}\}/) {
+        if (@skip_stack && $skip_stack[-1]) {
+          push @skip_stack, 1;
+        } else {
+          push @skip_stack, $has_ticket_staging ? 1 : 0;
+        }
+        next;
+      }
+
       # {{#IF_CHECK_COMMAND}}
       if ($line =~ /\{\{#IF_CHECK_COMMAND\}\}/) {
         if (@skip_stack && $skip_stack[-1]) {
@@ -1575,7 +1612,7 @@ process_conditions() {
       }
 
       # Closing tags
-      if ($line =~ /\{\{\/(IF_ROLE|IF_NO_ROLE|IF_MIGRATION|IF_DEVELOP_BRANCH|IF_NO_DEVELOP_BRANCH|IF_TICKET|IF_NO_TICKET|IF_CHECK_COMMAND|IF_NO_CHECK_COMMAND|IF_CLI)\}\}/) {
+      if ($line =~ /\{\{\/(IF_ROLE|IF_NO_ROLE|IF_MIGRATION|IF_DEVELOP_BRANCH|IF_NO_DEVELOP_BRANCH|IF_TICKET_STAGING|IF_NO_TICKET_STAGING|IF_TICKET|IF_NO_TICKET|IF_CHECK_COMMAND|IF_NO_CHECK_COMMAND|IF_CLI)\}\}/) {
         pop @skip_stack if @skip_stack;
         next;
       }
@@ -1587,7 +1624,7 @@ process_conditions() {
     }
 
     print join("\n", @result) . "\n";
-  ' "$roles_csv" "$MIGRATION_ENABLED" "$GIT_DEVELOP_BRANCH" "$CHECK_COMMAND" "$tmpfile_cond" "$TARGET_CLI" "$TICKET_ENABLED")
+  ' "$roles_csv" "$MIGRATION_ENABLED" "$GIT_DEVELOP_BRANCH" "$CHECK_COMMAND" "$tmpfile_cond" "$TARGET_CLI" "$TICKET_ENABLED" "$TICKET_STAGING_ENABLED")
 
   rm -f "$tmpfile_cond"
   echo "$content"
