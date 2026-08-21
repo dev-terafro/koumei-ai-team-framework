@@ -125,6 +125,37 @@ setup.sh --dry-run     # 実際にファイルを作成せずプレビュー
 
 フル体験は claude および antigravity ターゲット（codex はコアワークフローのみ）。
 
+### 課題管理システム連携（ticket・任意）
+
+**枠組みは特定の課題管理システムを前提としない。** 状態名は `koumei.config.yaml` の `ticket` セクションで
+宣言し、生成物にはその現場の名前が展開される。Jira でも GitHub Issues でも Linear でも、
+自分の現場で使っている状態名をそのまま書けばよい。
+
+```yaml
+ticket:
+  enabled: true
+  queue: |
+    status = "AI-READY" AND assignee = currentUser()   # 行列の条件。必ず自分の担当に絞る
+  status_designing:    "AI-PLANREVIEW"    # 設計フェーズ中
+  status_implementing: "AI-PROGRESS"      # 実装フェーズ中
+  status_review_ready: "AI-PR"            # 作業完了・PR待ち
+  status_parked:       "ペンディング"      # 待避（判断できず手を止めた）
+  status_staging_ok:   "本番デプロイ待ち"   # STAGING確認 合格
+  status_staging_ng:   "PR実装の差し戻し"   # STAGING確認 不合格
+```
+
+- **Phase 7 の STAGING確認チェックリストの判定先**も、この設定から生成される。
+  `status_staging_ok` / `status_staging_ng` / `status_parked` の**三つが揃ったときだけ**
+  状態遷移の指示になり、一つでも空なら「その現場の言葉で書く」一般形のまま出る
+  （片方だけ設定できると `** ** へ移す` という空の指示が出て、確認する人がそこで止まるため）
+- **`queue` を空のまま `enabled: true` にしても連携は無効**として扱う。
+  行列を絞らずに走らせれば、夜中に他の担当者のチケットまで拾ってしまう
+- **セクションごと書かなければ連携は一切行われない。** 既存プロジェクトはそのまま動く
+- **接続手段（MCP・CLI・API）は枠組みの管轄外。** 実行環境が備えるものを使う前提とし、
+  枠組みが持つのは「どこから引き、いつ何処へ動かすか」の作法のみ
+
+詳細は [docs/configuration.md](docs/configuration.md#ticket課題管理システム連携任意) を参照。
+
 ## ターゲットCLI別の実行フロー・ロール遷移
 
 各ターゲット環境に応じたエージェント起動・ロールバトンタッチの詳細は [docs/target-cli-flows.md](docs/target-cli-flows.md) を参照してください。
