@@ -978,8 +978,8 @@ assert "Phase 1: 設定不備をフォールバックで隠すなと書く" \
   grep -q "自動フォールバックで隠してはならない" <<<"$p1"
 
 # --- 付け替えが割に合うかを後から測れるようにする（issue #30 の検証項目） ---
-assert "Phase 1: 委譲先の消費を完了報告に残させる" grep -q "完了報告に1行記す" <<<"$p1"
-assert "Phase 1: 固定費があることを書く" grep -q "14〜16k" <<<"$p1"
+assert "Phase 1: 委譲先の消費をフェーズ台帳へ書かせる" grep -q "フェーズ台帳へ書く" <<<"$p1agy"
+assert "Phase 1: 記録先を一箇所に定めると明記" grep -q "完了報告ではなく台帳に書く" <<<"$p1agy"
 
 # --- git 禁止が Phase 1 の全経路に届くか（Phase 5 と同じ検査） ---
 assert "Phase 1 agy: プロンプトに git 禁止が届く" grep -q "git 操作を一切行わないこと" <<<"$p1agy"
@@ -1032,6 +1032,57 @@ assert "configuration: 委譲できるフェーズの節がある" grep -q "^###
 assert "config 例: 委譲対応フェーズが注記される" \
   grep -q "外部CLI委譲に対応しているのは analyst（Phase 1）と tech-lead-implement（Phase 5）" \
   "${REPO_DIR}/koumei.config.example.yaml"
+
+# ------------------------------------------------------------
+echo ""
+echo "[T23] 実行諸元のフェーズ台帳（モデル配置を比べるための記録）"
+
+make_project "$WORK_DIR/t23" 's/^  # - analyst.*/  - analyst/'
+bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 (T23)"
+PH=.claude/skills/koumei-start/docs/phases.md
+AN=.claude/skills/koumei-analyze/SKILL.md
+TMD=.agents/TEAM.md
+
+guard=$(awk '/^## フェーズ完了時の検査/,/^## Git 運用/' "$PH")
+
+# --- 台帳の実体 ---
+assert "台帳の節が立つ" grep -q "^### 実行諸元の記録（フェーズ台帳）" <<<"$guard"
+assert "台帳のパスが定まっている" grep -q "task-{番号}-execution.md" <<<"$guard"
+assert "台帳に実行諸元の列がある" grep -q "実行諸元" <<<"$guard"
+assert "台帳に委譲先の消費の列がある" grep -q "委譲先の消費" <<<"$guard"
+assert "TEAM.md の命名規則に台帳がある" grep -q "実行台帳: \`{タスクID}-execution.md\`" "$TMD"
+
+# --- なぜ要るか（判定は残るが、書いた者は残らない） ---
+assert "実行モデルは成果物に残らないと明記" grep -q "実行モデルは成果物のどこにも残らない" <<<"$guard"
+assert "書いたのが何かは残らないと明記" grep -q "それを書いたのが何だったかは残らない" <<<"$guard"
+assert "モデル列を書き換えると区別がつかなくなると明記" grep -q "過去と現在の区別がつかなくなる" <<<"$guard"
+assert "差し戻し回数・指摘件数の比較が目的だと書く" grep -q "差し戻し回数やレビュー指摘件数" <<<"$guard"
+assert "配置を変えてから記録しても遅いと戒める" grep -q "配置を変えてから記録を始めても遅い" <<<"$guard"
+
+# --- 書き手（規則と理由の両方を留める。理由だけだと規則の反転を素通りする） ---
+assert "書くのは指揮者だと明記" grep -q "であって、成果物を作ったエージェントではない" <<<"$guard"
+assert_not "作成エージェントの自己申告に反転していない" grep -q "成果物を作ったエージェントが自分で書く" <<<"$guard"
+assert "自己申告が外れる理由も残す" grep -q "書き手に自己申告させれば外れる" <<<"$guard"
+assert "サブエージェントは自分のモデルを知らないと明記" \
+  grep -q "自分がどのモデルで起動されたかを確実には知らない" <<<"$guard"
+
+# --- 置き場所（独立指示は落ちる。#30 の実測で実際に落ちた） ---
+assert "サイズ検査に相乗りさせるのが意図的だと明記" grep -q "相乗りさせるのは意図的である" <<<"$guard"
+assert "独立指示は落ちると明記" grep -q "という形の指示は実行時に落ちる" <<<"$guard"
+assert "台帳も絶対パスで追記させる" grep -q "リポジトリルートからの絶対パス" <<<"$guard"
+
+# --- 記録先の一本化（二箇所あると食い違う） ---
+assert "委譲の消費も台帳へ集約する" grep -q "フェーズ台帳へ書く" "$PH"
+assert "完了報告ではなく台帳だと明記" grep -q "完了報告ではなく台帳に書く" "$PH"
+assert_not "旧: phases から 完了報告に1行記す が消える" grep -q "完了報告に1行記す" "$PH"
+assert_not "旧: analyze スキルからも消える" grep -q "完了報告に1行記す" "$AN"
+assert "analyze スキルも台帳を指す" grep -q "task-{番号}-execution.md" "$AN"
+
+# --- ロール構成に依らず残る（台帳は指揮者の仕事であってロールではない） ---
+make_project "$WORK_DIR/t23-min"
+bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 (T23 min)"
+assert "最小ロールでも台帳の節は残る" \
+  grep -q "^### 実行諸元の記録（フェーズ台帳）" .claude/skills/koumei-start/docs/phases.md
 
 # ------------------------------------------------------------
 echo ""
