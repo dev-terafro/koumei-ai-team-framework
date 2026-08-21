@@ -175,9 +175,16 @@ else rm -f "$STRAY" "$INFO"; echo "✅ 迷子なし"; fi
 
 ### 1. 作業ブランチの作成（Phase 0 の冒頭・ファイルを一つも変更する前に）
 
+**先にタスク定義ファイルの `## ブランチ` を確定させ、そこへ書く。** 以下の既定値がそのまま入る。
+上書きは例外であり、三条件（明示・記録・理由）を課す（[rules.md](rules.md)「ブランチ運用」）。
+**無人運転では上書きを許さない。** 既定以外が必要と判じたら、そのタスクは待避する。
+
+書き終えたら、**タスク定義に記した値で**分岐する。
+
 ```sh
+# 既定値（config）。タスク定義の ## ブランチ が既定と異なる場合は、そちらを優先する
 {{#IF_DEVELOP_BRANCH}}
-BASE={{GIT_DEVELOP_BRANCH}}   # 派生元は開発ブランチ。{{GIT_MAIN_BRANCH}} ではない
+BASE={{GIT_DEVELOP_BRANCH}}   # 派生元・PR先は開発ブランチ。{{GIT_MAIN_BRANCH}} ではない
 {{/IF_DEVELOP_BRANCH}}
 {{#IF_NO_DEVELOP_BRANCH}}
 BASE={{GIT_MAIN_BRANCH}}
@@ -442,6 +449,7 @@ tech-lead をサブエージェントとして起動する（起動方法はCLI�
 - `{{SKILLS_DIR}}/{{SKILL_PREFIX}}-implement/SKILL.md` の手順セクションの内容
 - 対象タスク番号と指示書のパス
 - 軽微修正（クイック）の場合: 設計書が存在しないため、タスク定義と指示書を実装の前提とすること
+- **git 操作を一切行わないこと**（ブランチ操作・commit・push・PR作成。詳細は [rules.md](rules.md)「git 操作の排他」）
 
 {{#IF_CLI claude}}
 ### agy委譲モード
@@ -461,6 +469,7 @@ Bash tool で `codex exec -s workspace-write --full-auto "{プロンプト}"` �
 - `{{SKILLS_DIR}}/{{SKILL_PREFIX}}-implement/SKILL.md` の手順セクションの内容
 - 対象タスク番号と指示書のパス
 - 完了報告の保存先パス
+- **git 操作を一切行わないこと**（ブランチ操作・commit・push・PR作成。詳細は [rules.md](rules.md)「git 操作の排他」）
 {{/IF_CLI}}
 
 **実行後:** ビルド確認を行い、失敗した場合はエラーとして報告する。
@@ -607,8 +616,16 @@ Phase 2 と同様に devils-advocate サブエージェントを起動する。
 
 ### 3. PR作成
 
+**まず、PRの向け先をタスク定義ファイルの `## ブランチ` から取る。**
+そして `git rev-parse --abbrev-ref HEAD` が同じ項の「ブランチ名」と一致することを確かめる。
+
+**一致しなければPRを作らず、報告して待避する。** 食い違うということは、
+Phase 0 で決めた通りに分岐できていないか、途中で誰かが切り替えたということである。
+このまま作れば、意図しない向け先へのPRが立つ。照合の費用は一行、防ぐのは
+「気づかぬうちに本番ブランチへ向いていた」という最悪の一件である。
+
 **PRの作り方はホストによって異なる。`gh` は GitHub 専用であり、他所では通じない。**
-まずホストを見極める。
+続けてホストを見極める。
 
 ```sh
 {{#IF_DEVELOP_BRANCH}}

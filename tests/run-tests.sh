@@ -613,6 +613,58 @@ assert_not "節が無くても --update が reconfig を要求しない" grep -q
 
 # ------------------------------------------------------------
 echo ""
+echo "[T17] git 操作の排他とブランチ運用"
+
+make_project "$WORK_DIR/t17"
+bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 (T17)"
+P=.claude/skills/koumei-start/docs/phases.md
+R=.claude/skills/koumei-start/docs/rules.md
+TT=.claude/skills/koumei-start/docs/task-template.md
+
+# --- 不変則の宣言 ---
+assert "rules.md に git 操作の排他が立つ" grep -q "^## git 操作の排他（厳格ルール）" "$R"
+assert "粒度が「一作業ツリーに一人」である" grep -q "一つの作業ツリーにつき、git を触る者は一人" "$R"
+assert "理由（HEAD と index の共有）が書かれている" grep -q "HEAD\` と index は作業ツリーに一つしかない" "$R"
+assert "rules.md にブランチ運用が立つ" grep -q "^## ブランチ運用（厳格ルール）" "$R"
+assert "config が正であると明記する" grep -q "設定が正である。上書きは例外" "$R"
+assert "上書きの三条件がある" grep -q "書けないなら、それは上書きすべき場面ではない" "$R"
+assert "無人運転では上書きを許さない" grep -q "無人運転（\`--unattended\`）では上書きを一切許さない" "$R"
+
+# --- 禁止が全ての実行経路に届いているか（元の欠陥: 3経路中1つにしか無かった） ---
+p5=$(awk '/^## Phase 5/,/^## Phase 6/' "$P")
+for mode in 通常モード agy委譲モード Codex委譲モード; do
+  blk=$(awk -v m="### $mode" 'index($0,m)==1{f=1;next} f&&/^### /{exit} f' <<<"$p5")
+  if [[ -z "$blk" ]]; then
+    ng "Phase 5 に $mode の節がある"
+  elif grep -q "git commit は行わない\|git 操作を一切行わない" <<<"$blk"; then
+    ok "Phase 5 $mode のプロンプトに git 禁止が届く"
+  else
+    ng "Phase 5 $mode のプロンプトに git 禁止が届く"
+  fi
+done
+assert "tech-lead の役割定義自体にも git 禁止を刻む" grep -q "git 操作を一切行わないこと" .agents/tech-lead/CLAUDE.md
+assert "役割定義に禁止の理由も添える" grep -q "並列に動く" .agents/tech-lead/CLAUDE.md
+
+# --- 決定の記録先 ---
+assert "タスク定義にブランチの項がある" grep -q "^## ブランチ" "$TT"
+assert "派生元を記録させる" grep -q "^- 派生元:" "$TT"
+assert "PR先を記録させる" grep -q "^- PR先:" "$TT"
+assert "上書きの理由を記録させる" grep -q "^- 既定と異なる理由:" "$TT"
+assert "Phase 0/7 が config ではなくこの項を読むと明記" grep -q "config ではなくこの項を読む" "$TT"
+assert "Phase 0 の分岐がタスク定義を先に確定させる" grep -q "先にタスク定義ファイルの \`## ブランチ\` を確定させ" "$P"
+assert "既定より タスク定義 が優先されると明記" grep -q "そちらを優先する" "$P"
+
+# --- Phase 7 の照合（気づかぬうちに本番へ向くのを防ぐ） ---
+assert "PR作成前にブランチ名を照合させる" grep -q "同じ項の「ブランチ名」と一致することを確かめる" "$P"
+assert "食い違えばPRを作らず待避させる" grep -q "一致しなければPRを作らず、報告して待避する" "$P"
+
+# --- 無人運転側の待避条件 ---
+U=.claude/skills/koumei-start/docs/unattended.md
+assert "無人運転: 既定と異なる派生元が要れば待避する" grep -q "異なる派生元・PR先が必要" "$U"
+assert "無人運転: 照合の食い違いでも待避する" grep -q "タスク定義の記載と食い違った" "$U"
+
+# ------------------------------------------------------------
+echo ""
 echo "=========================================="
 echo " 結果: PASS=$PASS FAIL=$FAIL"
 if [[ $FAIL -gt 0 ]]; then
