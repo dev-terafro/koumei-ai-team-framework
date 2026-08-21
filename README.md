@@ -100,7 +100,15 @@ models:
 ```
 
 - 指定できる値: `haiku` / `sonnet` / `opus` / `fable`（またはフルモデルID）、
-  および TEAM.md「外部CLIモデル定義」に登録した名前（`agy` / `agy-high` / `codex` / `grok` 等）
+  および外部CLIモデル名（既定は `agy` / `agy-high` / `codex` / `gpt-5.6-sol` / `grok` / `gemini`）
+- **外部CLIモデルは config から増やせます。** `cli_models` に名前とコマンドを書けば、
+  そのまま `models.<ロール>` に指定できます（`permissions.allow` にも自動で配線されます）
+
+```yaml
+cli_models:
+  agy-sonnet: |
+    agy -p "{プロンプト}" --dangerously-skip-permissions --add-dir "$PWD" --model claude-sonnet-4-6 --print-timeout 30m --output-format json
+```
 - 変更は **`koumei.config.yaml` を編集して `setup.sh --update`**。
   `.agents/TEAM.md` の直接編集は生成物への書き込みであり、hook がブロックし `--update` で消えます
 - **どこに何を置くかの理由**は生成後の `.agents/TEAM.md`「配置の原則」に、
