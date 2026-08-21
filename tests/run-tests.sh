@@ -1159,6 +1159,59 @@ assert "README: まず既定で回せと順序を示す" grep -q "まず既定�
 
 # ------------------------------------------------------------
 echo ""
+echo "[T25] enabled:true かつ queue 空のとき、無人運転は黙って別の行列へ逃げない（issue #31）"
+
+HALT_MARK="【この設定では無人運転を起動できない】"
+Q_ON='/^ticket:/,/^$/s/^  enabled: false/  enabled: true/'
+Q_SET='s|^  queue: ""|  queue: \|\n    status = "AI-READY" AND assignee = currentUser()|'
+
+# --- 食い違い: enabled:true・queue 空 → 起動前検査で落とす ---
+make_project "$WORK_DIR/t25-miss" "$Q_ON"
+bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 (T25 miss)"
+U=.claude/skills/koumei-start/docs/unattended.md
+assert "食い違い: 起動できないと書かれる" grep -q "$HALT_MARK" "$U"
+assert "食い違い: 一件も処理しないと明記" grep -q "一件も処理せず、直ちに報告して終えること" "$U"
+assert "食い違い: 二つは両立しないと明記" grep -q "この二つは両立しない" "$U"
+assert "食い違い: 黙って読み替えるなと明記" \
+  grep -q "黙ってローカルのタスクファイルへ読み替えて走ってはならない" "$U"
+assert "食い違い: 親切なフォールバックを戒める" grep -q "親切なフォールバックで覆い隠してはならない" "$U"
+assert "食い違い: 直し方を二択で示す" grep -q "ticket.enabled: false\` にして" "$U"
+assert "食い違い: 対話実行は止めないと明記" grep -q "対話実行（人が見ている場）はこの限りではない" "$U"
+assert "食い違い: setup も警告は出す（対話実行のための気づき）" grep -q "ticket.queue が空です" setup.log
+assert "食い違い: 連携自体は無効のまま（絞りなし行列を使わない）" grep -q "連携を無効として扱います" setup.log
+assert_not "食い違い: チケット行列の節は出ない" grep -q "課題管理システムに問い合わせ" "$U"
+assert_not "食い違い: 条件タグが生で残らない" grep -q "IF_TICKET_QUEUE_MISSING" "$U"
+
+# --- 正常: enabled:true・queue あり → 落とさない ---
+make_project "$WORK_DIR/t25-ok" "$Q_ON" "$Q_SET"
+bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 (T25 ok)"
+assert_not "正常: 起動できない旨は出ない" grep -q "$HALT_MARK" "$U"
+assert "正常: 行列の絞り込み検査は残る" grep -q "行列の絞り込み" "$U"
+assert "正常: チケット行列の節が出る" grep -q "課題管理システムに問い合わせ" "$U"
+
+# --- enabled:false → 従来どおり無人運転できる ---
+make_project "$WORK_DIR/t25-off"
+bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 (T25 off)"
+assert_not "無効: 起動できない旨は出ない" grep -q "$HALT_MARK" "$U"
+assert_not "無効: 警告も出ない" grep -q "ticket.queue が空です" setup.log
+
+# --- ticket 節ごと無し → 従来どおり（既存プロジェクトを壊さない） ---
+make_project "$WORK_DIR/t25-legacy" '/^ticket:/,/^$/d'
+bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 (T25 legacy)"
+assert_not "節なし: 起動できない旨は出ない" grep -q "$HALT_MARK" "$U"
+assert "節なし: 無人運転の手順は生成される" grep -q "^## 起動前の検査" "$U"
+
+# --- 利用者向け文書の追随（README を忘れる事故が過去に四度） ---
+assert "README: 無人運転が起動しないと載る" \
+  grep -q "無人運転はこの設定では起動しない" "${REPO_DIR}/README.md"
+assert "README: 読み替えて走る危うさが載る" \
+  grep -q "朝、意図と違うものが処理されている" "${REPO_DIR}/README.md"
+assert "README: 対話実行は継続すると載る" grep -q "対話実行は人が警告を読める" "${REPO_DIR}/README.md"
+assert "configuration: 無人運転は起動しないと載る" \
+  grep -q "無人運転はこの設定では起動せず" "${REPO_DIR}/docs/configuration.md"
+
+# ------------------------------------------------------------
+echo ""
 echo "=========================================="
 echo " 結果: PASS=$PASS FAIL=$FAIL"
 if [[ $FAIL -gt 0 ]]; then

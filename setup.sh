@@ -1105,6 +1105,7 @@ load_config() {
   # 課題管理システム連携（任意・無人運転で消費される）
   # 未設定のプロジェクトを壊さないため CONFIG_REQUIRED_KEYS には加えない。
   # 欠落＝無効として扱い、連携の記述は一切展開しない
+  TICKET_QUEUE_MISSING="false"
   TICKET_ENABLED=$(yaml_get "ticket.enabled")
   # queue は引用符・# を含むため multiline 経由で取る（プレーンスカラーだと引用符が剥がれる）
   TICKET_QUEUE=$(yaml_get_multiline "ticket" "queue")
@@ -1120,6 +1121,10 @@ load_config() {
     if [[ -z "$TICKET_QUEUE" ]]; then
       log_warn "ticket.enabled: true ですが ticket.queue が空です。無人運転が他の担当者のチケットまで拾うため、連携を無効として扱います。"
       TICKET_ENABLED="false"
+      # 無効化しただけでは「チケット駆動で回すつもりだった」という意思が消える。
+      # 対話実行はこの警告を人が読めるが、無人運転には読む人が居ない。
+      # 旗を立てて、無人運転側の起動前検査に「落とせ」と書かせる
+      TICKET_QUEUE_MISSING="true"
     fi
   else
     TICKET_ENABLED="false"
@@ -1477,6 +1482,7 @@ process_conditions() {
     my $target_cli = $ARGV[5] // "";
     my $has_ticket = ($ARGV[6] // "") eq "true" ? 1 : 0;
     my $has_ticket_staging = ($ARGV[7] // "") eq "true" ? 1 : 0;
+    my $ticket_queue_missing = ($ARGV[8] // "") eq "true" ? 1 : 0;
 
     open(my $fh, "<", $ARGV[4]) or die "Cannot open: $!";
     my @lines = <$fh>;
@@ -1560,6 +1566,16 @@ process_conditions() {
         next;
       }
 
+      # {{#IF_TICKET_QUEUE_MISSING}}
+      if ($line =~ /\{\{#IF_TICKET_QUEUE_MISSING\}\}/) {
+        if (@skip_stack && $skip_stack[-1]) {
+          push @skip_stack, 1;
+        } else {
+          push @skip_stack, $ticket_queue_missing ? 0 : 1;
+        }
+        next;
+      }
+
       # {{#IF_TICKET_STAGING}}
       if ($line =~ /\{\{#IF_TICKET_STAGING\}\}/) {
         if (@skip_stack && $skip_stack[-1]) {
@@ -1612,7 +1628,7 @@ process_conditions() {
       }
 
       # Closing tags
-      if ($line =~ /\{\{\/(IF_ROLE|IF_NO_ROLE|IF_MIGRATION|IF_DEVELOP_BRANCH|IF_NO_DEVELOP_BRANCH|IF_TICKET_STAGING|IF_NO_TICKET_STAGING|IF_TICKET|IF_NO_TICKET|IF_CHECK_COMMAND|IF_NO_CHECK_COMMAND|IF_CLI)\}\}/) {
+      if ($line =~ /\{\{\/(IF_ROLE|IF_NO_ROLE|IF_MIGRATION|IF_DEVELOP_BRANCH|IF_NO_DEVELOP_BRANCH|IF_TICKET_QUEUE_MISSING|IF_TICKET_STAGING|IF_NO_TICKET_STAGING|IF_TICKET|IF_NO_TICKET|IF_CHECK_COMMAND|IF_NO_CHECK_COMMAND|IF_CLI)\}\}/) {
         pop @skip_stack if @skip_stack;
         next;
       }
@@ -1624,7 +1640,7 @@ process_conditions() {
     }
 
     print join("\n", @result) . "\n";
-  ' "$roles_csv" "$MIGRATION_ENABLED" "$GIT_DEVELOP_BRANCH" "$CHECK_COMMAND" "$tmpfile_cond" "$TARGET_CLI" "$TICKET_ENABLED" "$TICKET_STAGING_ENABLED")
+  ' "$roles_csv" "$MIGRATION_ENABLED" "$GIT_DEVELOP_BRANCH" "$CHECK_COMMAND" "$tmpfile_cond" "$TARGET_CLI" "$TICKET_ENABLED" "$TICKET_STAGING_ENABLED" "${TICKET_QUEUE_MISSING:-false}")
 
   rm -f "$tmpfile_cond"
   echo "$content"
