@@ -1086,6 +1086,79 @@ assert "最小ロールでも台帳の節は残る" \
 
 # ------------------------------------------------------------
 echo ""
+echo "[T24] モデル配置が config に追随し、変えられると利用者に伝わるか"
+
+# --- 解説文が config に追随するか（元の欠陥: 表はプレースホルダ、解説はリテラル直書き） ---
+# 既定に無い組み合わせで生成し、既定値の文字列が解説に居残らないことを見る
+make_project "$WORK_DIR/t24" \
+  's/^  # - analyst.*/  - analyst/' \
+  's/^  # - inquisitor.*/  - inquisitor/' \
+  's/^  # - ux-designer.*/  - ux-designer/' \
+  's/^  # - scribe.*/  - scribe/' \
+  's/^  koumei: .*/  koumei: "haiku"/' \
+  's/^  analyst: .*/  analyst: "agy"/' \
+  's/^  inquisitor: .*/  inquisitor: "opus"/' \
+  's/^  ux-designer: .*/  ux-designer: "haiku"/' \
+  's/^  tech-lead-design: .*/  tech-lead-design: "opus"/' \
+  's/^  tech-lead-implement: .*/  tech-lead-implement: "codex"/' \
+  's/^  devils-advocate: .*/  devils-advocate: "opus"/' \
+  's/^  scribe: .*/  scribe: "haiku"/'
+bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 (T24)"
+TMD=.agents/TEAM.md
+princ=$(awk '/^- \*\*配置の原則\*\*/,/^#### 外部CLIモデル定義/' "$TMD")
+
+assert "配置の原則の節が取れる" test -n "$princ"
+# fable はどのロールにも設定していない。解説に現れたら直書きが残っている
+assert_not "解説に既定値 fable が居残らない" grep -q "fable" <<<"$princ"
+assert_not "解説に既定値 sonnet が居残らない" grep -q "sonnet" <<<"$princ"
+# 設定した値が解説に出ること
+assert "解説の tech-lead 設計が設定値" grep -q "tech-lead 設計（opus）" <<<"$princ"
+assert "解説の tech-lead 実装が設定値" grep -q "tech-lead 実装（codex）" <<<"$princ"
+assert "解説の devils-advocate が設定値" grep -q "devils-advocate（opus）" <<<"$princ"
+assert "解説の analyst が設定値" grep -q "analyst（agy）" <<<"$princ"
+assert "解説の inquisitor が設定値" grep -q "inquisitor（opus）" <<<"$princ"
+assert "解説の scribe が設定値" grep -q "scribe（haiku）" <<<"$princ"
+assert "解説の koumei が設定値" grep -q "koumei（haiku）" <<<"$princ"
+assert "解説の ux-designer が設定値" grep -q "ux-designer（haiku）" <<<"$princ"
+# 理由は値に依らないと明記（値と理由が癒着すると差し替えで自己矛盾する）
+assert "理由は値に依らないと明記" grep -q "理由は配置の値に依らない" <<<"$princ"
+assert "括弧と表の食い違いを不具合として報告させる" grep -q "それは生成の不具合である" <<<"$princ"
+# 台帳の例表も追随する
+assert "台帳の例表も設定値から生成される" \
+  grep -q "| Phase 4 | devils-advocate | opus |" .claude/skills/koumei-start/docs/phases.md
+
+# --- ロール無効時に解説が漏れないか（旧: 無効ロールにも言及していた） ---
+make_project "$WORK_DIR/t24-min"
+bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 (T24 min)"
+p2=$(awk '/^- \*\*配置の原則\*\*/,/^#### 外部CLIモデル定義/' .agents/TEAM.md)
+assert_not "無効ロール（analyst）が解説に出ない" grep -q "analyst（" <<<"$p2"
+assert_not "無効ロール（scribe）が解説に出ない" grep -q "scribe（" <<<"$p2"
+assert "コアロールの解説は残る" grep -q "devils-advocate（" <<<"$p2"
+
+# --- 「ロール別に変えられる」ことが利用者に届くか ---
+# (a) セットアップ完了時の案内（ウィザードで作った人が唯一必ず見る場所）
+assert "完了時にモデル配置を案内する" grep -q "モデルはロール別に指定できます" setup.log
+assert "完了時の案内が変更経路を示す" grep -q "models: を編集して setup.sh --update" setup.log
+assert "完了時の案内が TEAM.md 直接編集を禁じる" grep -q "TEAM.md の直接編集は不可" setup.log
+assert_not "無効ロールは案内にも出ない" grep -q "analyst=" setup.log
+
+make_project "$WORK_DIR/t24-opt" 's/^  # - analyst.*/  - analyst/'
+bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 (T24 opt)"
+assert "有効ロールは案内に出る" grep -q "analyst=" setup.log
+
+# (b) README（配布物として最初に読まれる場所）
+RM5="${REPO_DIR}/README.md"
+assert "README: オプションロール表に既定モデル列がある" \
+  bash -c 'awk "/^### オプションロール/,/^### モデルはロール別に変えられる/" '"$RM5"' | grep -q "既定モデル(claude)"'
+assert "README: 変えられる節がある" grep -q "^### モデルはロール別に変えられる" "$RM5"
+assert "README: 固定値ではないと明記" grep -q "固定値ではありません" "$RM5"
+assert "README: 指定できる値が載る" grep -q "および TEAM.md「外部CLIモデル定義」に登録した名前" "$RM5"
+assert "README: 変更経路が載る" grep -q "koumei.config.yaml\` を編集して \`setup.sh --update" "$RM5"
+assert "README: TEAM.md 直接編集は消えると載る" grep -q "hook がブロックし \`--update\` で消えます" "$RM5"
+assert "README: まず既定で回せと順序を示す" grep -q "まず既定のまま回して" "$RM5"
+
+# ------------------------------------------------------------
+echo ""
 echo "=========================================="
 echo " 結果: PASS=$PASS FAIL=$FAIL"
 if [[ $FAIL -gt 0 ]]; then
