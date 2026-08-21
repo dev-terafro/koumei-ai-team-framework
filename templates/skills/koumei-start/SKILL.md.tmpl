@@ -10,7 +10,7 @@ description: {{COMMANDER_NAME}}として新しいタスクを開始する。全�
 description: {{COMMANDER_NAME}}として新しいタスクを開始する。全自動/順次/マルチタスクモードを選択し、要件定義からPR作成までを統括する。
 {{/IF_CLI}}
 {{#IF_CLI claude}}
-argument-hint: "{要件テキスト} [--manual] [--multi]"
+argument-hint: "{要件テキスト} [--manual] [--multi] [--unattended]"
 disable-model-invocation: true
 allowed-tools: Read Write Glob Grep Bash Edit Agent AskUserQuestion
 {{/IF_CLI}}
@@ -47,6 +47,9 @@ allowed-tools: Read Write Glob Grep Bash Edit Agent AskUserQuestion
 
 `$ARGUMENTS` を確認し、実行モードを決定する:
 
+0. **`--unattended` が含まれる場合** → 無人運転（[docs/unattended.md](docs/unattended.md) の手順で実行）。
+   **この判定を最優先する。**人がいない前提の運転であり、以下のいずれの分岐にも入ってはならない
+   （選択肢を提示すれば、そこで朝まで止まる）
 1. **`--manual` が含まれる場合** → 順次モード（Phase 0 のみ実行し案内して終了）
 {{#IF_CLI claude}}
 2. **`--multi` が含まれる場合** → マルチタスクモード（[docs/multi-task.md](docs/multi-task.md) の手順で実行）
@@ -94,6 +97,15 @@ claude の場合は AskUserQuestion を使用する。
 ### 手順 4. タスク定義ファイルの作成
 `.agents/koumei/tasks/task-{番号}.md` に記載する内容は [docs/task-template.md](docs/task-template.md) を参照。
 
+**`## ブランチ` の項は、この時点で必ず確定させる。**
+`$ARGUMENTS` が要件指示書（`.agents/koumei/requests/{要件名}.md`）を指している場合、
+そこに「ブランチ戦略」の節があれば**その内容をタスク定義へ書き写す**。
+無ければ `koumei.config.yaml` の既定値を書く。
+
+**要件指示書に書かれたまま放置してはならない。** Phase 0 の分岐も Phase 7 の PR も
+タスク定義を読むのであって、要件指示書は読まない。写さなければ、確認した意味が消える
+（詳細は [docs/rules.md](docs/rules.md)「ブランチ運用」）。
+
 ### 手順 5. 各担当への指示書の作成
 
 以下の指示書を作成する:
@@ -135,7 +147,7 @@ claude の場合は AskUserQuestion を使用する。
 | 4 | 設計レビュー | devils-advocate | 設計成果物の検分（APPROVED/REVISE） |
 | 5 | 実装 | tech-lead | 設計に基づく実装 + ビルド確認 |
 | 6 | コードレビュー | devils-advocate | 実装コードの検分（APPROVED/REVISE） |
-| 7 | ドキュメント反映 + PR作成 | koumei | 公式ドキュメント更新 + ブランチpush + PR作成 |
+| 7 | ドキュメント反映 + PR作成 | koumei | 公式ドキュメント更新 + STAGING確認チェックリスト + PR作成（push はフェーズ完了ごとに実施済み） |
 
 {{#IF_ROLE inquisitor}}
 **タスク種別によるスキップ**: 軽微修正（クイック）は Phase 1〜4、バグ修正（小）は Phase 2.5,3,4 をスキップ。Phase 6 は常に必須。詳細は [docs/rules.md](docs/rules.md) 参照。

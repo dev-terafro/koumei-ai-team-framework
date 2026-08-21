@@ -469,6 +469,284 @@ assert "主客転倒しないので exit 0" grep -q "exit=0" <<<"$out"
 
 # ------------------------------------------------------------
 echo ""
+echo "[T14] Git運用とPR作成（派生元の分岐・ホスト差異）"
+
+# gh pr create が必ず --base を伴うか（無指定だと既定ブランチへ向いたPRが立つ）
+gh_always_based() { ! grep "gh pr create" "$1" | grep -qv -- "--base"; }
+
+for sc in dev nodev; do
+  if [[ "$sc" == dev ]]; then
+    make_project "$WORK_DIR/t14-$sc"
+  else
+    make_project "$WORK_DIR/t14-$sc" 's/^  develop_branch:.*/  develop_branch: ""/'
+  fi
+  bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 ($sc)"
+  P=.claude/skills/koumei-start/docs/phases.md
+
+  assert "$sc: Git運用の節が配布される" grep -q "^## Git 運用（全フェーズ共通）" "$P"
+  assert "$sc: 作業ブランチの作成手順がある" grep -q "git checkout -b" "$P"
+  assert "$sc: フェーズ完了ごとの commit/push を命じる" grep -q "フェーズ完了ごとにコミットし、直ちに push" "$P"
+  assert "$sc: 汚れた作業ツリーでの分岐を禁じる" grep -q "git status --porcelain" "$P"
+  assert_not "$sc: 未置換の占位子が残っていない" grep -q "{{" "$P"
+
+  # 派生元の出し分け。ここを誤ると無人の夜に本番ブランチ向けのPRが立つ
+  if [[ "$sc" == dev ]]; then
+    assert "$sc: 派生元・PR先が develop" grep -q "^BASE=develop" "$P"
+    assert_not "$sc: main が漏れ出していない" grep -q "^BASE=main" "$P"
+  else
+    assert "$sc: 派生元・PR先が main" grep -q "^BASE=main" "$P"
+    assert_not "$sc: develop が漏れ出していない" grep -q "^BASE=develop" "$P"
+  fi
+
+  assert "$sc: GitHub は --base 付きで gh を叩く" grep -q 'gh pr create --base' "$P"
+  assert "$sc: --base を欠く gh pr create が無い" gh_always_based "$P"
+  assert "$sc: ホストを見極める分岐がある" grep -qF '*bitbucket.org*) HOST=bitbucket' "$P"
+  assert "$sc: Bitbucket ではPRを自動作成しない" grep -q "自動では作成しない" "$P"
+  assert "$sc: PR作成の失敗でタスクを失敗扱いにしない" grep -q "失敗扱いにしてはならない" "$P"
+done
+
+# --- PR作成URLの組み立てを生成物から抜き出し、実際のリモート表記で走らせる ---
+SLUGSH="$WORK_DIR/slug.sh"
+awk '/^SLUG=\$\(git remote get-url origin/,/\.git\$#/' \
+  "$WORK_DIR/t14-dev/.claude/skills/koumei-start/docs/phases.md" > "$SLUGSH"
+echo 'echo "$SLUG"' >> "$SLUGSH"
+assert "URL組み立てを生成物から抽出できる" test -s "$SLUGSH"
+
+for r in "git@bitbucket.org:acme/repo.git" "https://bitbucket.org/acme/repo.git" "https://bitbucket.org/acme/repo"; do
+  d="$WORK_DIR/t14-url"; rm -rf "$d"; mkdir -p "$d"; cd "$d"
+  git init -q; git remote add origin "$r"
+  assert "URL: $r から acme/repo を得る" test "$(bash "$SLUGSH")" = "acme/repo"
+done
+
+# ------------------------------------------------------------
+echo ""
+echo "[T15] STAGING確認チェックリスト（様式と移植タスクの上乗せ）"
+
+for mg in on off; do
+  if [[ "$mg" == on ]]; then
+    make_project "$WORK_DIR/t15-$mg" '/^migration:/,/^$/s/^  enabled: false/  enabled: true/'
+  else
+    make_project "$WORK_DIR/t15-$mg"
+  fi
+  bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 (migration=$mg)"
+  P=.claude/skills/koumei-start/docs/phases.md
+
+  assert "mg=$mg: チェックリストの節が配布される" grep -q "STAGING確認チェックリスト" "$P"
+  assert "mg=$mg: 出力先を明記している" grep -q "staging-check.md" "$P"
+  assert "mg=$mg: チケットのコメントにも記すよう命じる" grep -q "チケットのコメントにも記す" "$P"
+  assert "mg=$mg: 期待する結果の空欄を禁じる" grep -q "空欄にしてはならない" "$P"
+  assert "mg=$mg: 事前条件を冒頭に置かせる" grep -q "事前条件は必ず冒頭に置く" "$P"
+  assert "mg=$mg: 回帰を別表に分けさせる" grep -q "回帰は別表に分ける" "$P"
+  assert "mg=$mg: 未検証領域の明記を命じる" grep -q "自動で確かめられなかったことを正直に書く" "$P"
+  assert "mg=$mg: 判定の行き先が三分岐" grep -q "判断に迷う" "$P"
+  assert "mg=$mg: 種別ごとの項目数上限がある" grep -q "バグ修正（中） | 4〜6" "$P"
+  assert "mg=$mg: PR作成の節番が繰り下がっている" grep -q "^### 3. PR作成" "$P"
+
+  # 移植の上乗せ。移行元との突き合わせを欠いた移植確認は何も確認していない
+  if [[ "$mg" == on ]]; then
+    assert "mg=$mg: 移行元との突き合わせを必須にする" grep -q "移行元との突き合わせ" "$P"
+  else
+    assert_not "mg=$mg: 非移植PJに移植専用の掟が漏れない" grep -q "移行元との突き合わせ" "$P"
+  fi
+done
+
+# ------------------------------------------------------------
+echo ""
+echo "[T16] 無人運転（行列・待避・戦況表・課題管理連携）"
+
+U=.claude/skills/koumei-start/docs/unattended.md
+
+# --- 連携なし（既定）。設定を書いていない既存プロジェクトが無傷であること ---
+make_project "$WORK_DIR/t16-off"
+bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 (ticket=off)"
+assert "off: 無人運転の手順書が配布される" test -f "$U"
+assert "off: 問うてはならぬ大原則がある" grep -q "問うてはならない。待避せよ" "$U"
+assert "off: 連携なしでもタスク定義から行列を引く" grep -q "task-\*.md" "$U"
+assert_not "off: 課題管理連携の記述が漏れない" grep -q "課題管理システムに問い合わせ" "$U"
+assert_not "off: 未置換の占位子が残らない" grep -q "{{" "$U"
+assert "off: --unattended を最優先で判定させる" grep -q "この判定を最優先する" .claude/skills/koumei-start/SKILL.md
+
+# --- 連携あり ---
+make_project "$WORK_DIR/t16-on" \
+  '/^ticket:/,/^$/s/^  enabled: false/  enabled: true/' \
+  's/^  status_designing: ""/  status_designing: "AI-PLANREVIEW"/' \
+  's/^  status_implementing: ""/  status_implementing: "AI-PROGRESS"/' \
+  's/^  status_review_ready: ""/  status_review_ready: "AI-PR"/' \
+  's/^  status_parked: ""/  status_parked: "ペンディング"/'
+# queue は引用符を含むためブロックスカラーで置く（プレーンだと yq 無し環境で引用符が剥がれる）
+perl -i -pe 's{^  queue: ""$}{  queue: |\n    status = "AI-READY" AND assignee = currentUser()}' koumei.config.yaml
+bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 (ticket=on)"
+assert "on: 行列の条件が展開される" grep -q "assignee = currentUser()" "$U"
+assert "on: JQLの引用符が剥がれない" grep -qF 'status = "AI-READY"' "$U"
+assert "on: 設計中の状態名が展開される" grep -q "AI-PLANREVIEW" "$U"
+assert "on: 実装中の状態名が展開される" grep -q "AI-PROGRESS" "$U"
+assert "on: PR待ちの状態名が展開される" grep -q "AI-PR" "$U"
+assert "on: 待避先の状態名が展開される" grep -q "ペンディング" "$U"
+assert "on: 行列を勝手に広げるなと戒める" grep -q "その場で広げてはならない" "$U"
+assert "on: 完了コメントにチェックリスト全文を載せさせる" grep -q "STAGING確認チェックリストの全文" "$U"
+assert_not "on: 未置換の占位子が残らない" grep -q "{{" "$U"
+
+# --- 待避と戦況表 ---
+assert "待避で「何が決まれば進むか」を書かせる" grep -q "何が決まれば進めるか" "$U"
+assert "待避前に commit + push させる" grep -q "そこまでの成果を commit + push" "$U"
+assert "三件続けて待避したら運転を終える" grep -q "三件続けて待避した" "$U"
+assert "戦況表の出力先が定まっている" grep -q "night-{YYYY-MM-DD}.md" "$U"
+assert "戦況表はコミットさせない" grep -q "コミットしない" "$U"
+assert "待避を先に、完遂を後に書かせる" grep -q "待避を先に、完遂を後に書く" "$U"
+assert "一件も処理できなかった夜も表を書かせる" grep -q "一件も処理できなかった夜も" "$U"
+
+# --- 安全弁: 絞り込みを欠いた連携は無効化される（他の担当者のチケットを拾わせない） ---
+make_project "$WORK_DIR/t16-noqueue" '/^ticket:/,/^$/s/^  enabled: false/  enabled: true/'
+bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 (ticket=絞り込みなし)"
+assert "絞り込みが無ければ警告する" grep -q "ticket.queue が空" setup.log
+assert_not "絞り込みが無ければ連携記述を出さない" grep -q "課題管理システムに問い合わせ" "$U"
+
+# --- 後方互換: ticket セクションを持たない既存プロジェクトを壊さない ---
+# 新設キーを CONFIG_REQUIRED_KEYS に加えると --update が drift 判定で止まるため、その回帰を張る
+make_project "$WORK_DIR/t16-legacy" '/^ticket:/,/^$/d'
+assert_not "検証用configに ticket 節が無い" grep -q "^ticket:" koumei.config.yaml
+bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 (ticket 節なし)"
+assert "節が無くても生成が通る" test -f "$U"
+assert_not "節が無ければ連携記述を出さない" grep -q "課題管理システムに問い合わせ" "$U"
+bash "$SETUP" --update > update.log 2>&1 || ng "--update 実行 (ticket 節なし)"
+assert_not "節が無くても --update が reconfig を要求しない" grep -q "reconfig" update.log
+
+# ------------------------------------------------------------
+echo ""
+echo "[T17] git 操作の排他とブランチ運用"
+
+make_project "$WORK_DIR/t17"
+bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 (T17)"
+P=.claude/skills/koumei-start/docs/phases.md
+R=.claude/skills/koumei-start/docs/rules.md
+TT=.claude/skills/koumei-start/docs/task-template.md
+
+# --- 不変則の宣言 ---
+assert "rules.md に git 操作の排他が立つ" grep -q "^## git 操作の排他（厳格ルール）" "$R"
+assert "粒度が「一作業ツリーに一人」である" grep -q "一つの作業ツリーにつき、git を触る者は一人" "$R"
+assert "理由（HEAD と index の共有）が書かれている" grep -q "HEAD\` と index は作業ツリーに一つしかない" "$R"
+assert "rules.md にブランチ運用が立つ" grep -q "^## ブランチ運用（厳格ルール）" "$R"
+assert "config が正であると明記する" grep -q "設定が正である。上書きは例外" "$R"
+assert "上書きの三条件がある" grep -q "書けないなら、それは上書きすべき場面ではない" "$R"
+assert "無人運転では上書きを許さない" grep -q "無人運転（\`--unattended\`）では上書きを一切許さない" "$R"
+
+# --- 禁止が全ての実行経路に届いているか（元の欠陥: 3経路中1つにしか無かった） ---
+p5=$(awk '/^## Phase 5/,/^## Phase 6/' "$P")
+for mode in 通常モード agy委譲モード Codex委譲モード; do
+  blk=$(awk -v m="### $mode" 'index($0,m)==1{f=1;next} f&&/^### /{exit} f' <<<"$p5")
+  if [[ -z "$blk" ]]; then
+    ng "Phase 5 に $mode の節がある"
+  elif grep -q "git commit は行わない\|git 操作を一切行わない" <<<"$blk"; then
+    ok "Phase 5 $mode のプロンプトに git 禁止が届く"
+  else
+    ng "Phase 5 $mode のプロンプトに git 禁止が届く"
+  fi
+done
+assert "tech-lead の役割定義自体にも git 禁止を刻む" grep -q "git 操作を一切行わないこと" .agents/tech-lead/CLAUDE.md
+assert "役割定義に禁止の理由も添える" grep -q "並列に動く" .agents/tech-lead/CLAUDE.md
+
+# --- 決定の記録先 ---
+assert "タスク定義にブランチの項がある" grep -q "^## ブランチ" "$TT"
+assert "派生元を記録させる" grep -q "^- 派生元:" "$TT"
+assert "PR先を記録させる" grep -q "^- PR先:" "$TT"
+assert "上書きの理由を記録させる" grep -q "^- 既定と異なる理由:" "$TT"
+assert "Phase 0/7 が config ではなくこの項を読むと明記" grep -q "config ではなくこの項を読む" "$TT"
+assert "Phase 0 の分岐がタスク定義を先に確定させる" grep -q "先にタスク定義ファイルの \`## ブランチ\` を確定させ" "$P"
+assert "既定より タスク定義 が優先されると明記" grep -q "そちらを優先する" "$P"
+
+# --- Phase 7 の照合（気づかぬうちに本番へ向くのを防ぐ） ---
+assert "PR作成前にブランチ名を照合させる" grep -q "同じ項の「ブランチ名」と一致することを確かめる" "$P"
+assert "食い違えばPRを作らず待避させる" grep -q "一致しなければPRを作らず、報告して待避する" "$P"
+
+# --- 無人運転側の待避条件 ---
+U=.claude/skills/koumei-start/docs/unattended.md
+assert "無人運転: 既定と異なる派生元が要れば待避する" grep -q "異なる派生元・PR先が必要" "$U"
+assert "無人運転: 照合の食い違いでも待避する" grep -q "タスク定義の記載と食い違った" "$U"
+
+# ------------------------------------------------------------
+echo ""
+echo "[T18] git 記述の全体整合（古い前提の残留検知）"
+
+make_project "$WORK_DIR/t18"
+bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 (T18)"
+P=.claude/skills/koumei-start/docs/phases.md
+R=.claude/skills/koumei-start/docs/rules.md
+EH=.claude/skills/koumei-start/docs/error-handling.md
+TM=.agents/task-manager/CLAUDE.md
+S=.claude/skills/koumei-start/SKILL.md
+
+# --- PR先が「メインブランチ」で固定されていた古い記述 ---
+assert_not "指揮者の役割定義にメインブランチ固定のPRが残らない" grep -q "メインブランチにPR" .agents/koumei/CLAUDE.md
+assert_not "TEAM.md のフロー図にメインブランチ固定のPRが残らない" grep -q "メインブランチへ PR" .agents/TEAM.md
+assert "指揮者の役割定義が config を正とする" grep -q "既定のPR先ブランチへPR" .agents/koumei/CLAUDE.md
+
+# --- task-manager の worktree 作成（命名が config を無視し、派生元が暗黙だった） ---
+assert_not "worktree のブランチ名が決め打ちでない" grep -q -- "-b feature/task-{番号}" "$TM"
+assert "worktree の派生元を明示する" grep -q 'git worktree add .* "origin/\$BASE"' "$TM"
+assert "worktree の命名が branch_pattern に従う" grep -q "に従って組み立てる" "$TM"
+assert "派生元の省略を禁じる理由を書く" grep -q "省けば worktree は現在の" "$TM"
+
+# --- 外部CLI委譲: PATH に在るだけで委譲してはならない ---
+assert "委譲の可否は TEAM.md の指定で決まる" grep -q "委譲するか否かは TEAM.md の指定で決まる" "$P"
+assert "PATH 常駐だけでの委譲を禁じる" grep -q "PATH に在るというだけで委譲してはならない" "$P"
+assert_not "旧: command -v 成功だけで委譲する記述が残らない" grep -q "が指定または \`command -v" "$P"
+
+# --- 委譲先の作業ツリー（別 worktree だと commit されず迷子になる） ---
+assert "委譲先を同じ作業ツリーで動かす" grep -q "同じ作業ツリーで動かす" "$P"
+assert_not "worktree 内実行の推奨が残らない（phases）" grep -q "worktree 内での実行を推奨" "$P"
+assert_not "worktree 内実行の推奨が残らない（TEAM）" grep -q "worktree 内での実行を推奨" .agents/TEAM.md
+assert "隔離はブランチとコミットが担うと明記" grep -q "隔離は worktree ではなく" "$P"
+
+# --- 読み取り専用 git は禁じない（レビューが git diff を使うため） ---
+assert "読み取り専用の git を許すと明記" grep -q "読み取りは禁じない" "$R"
+assert "禁ずるのは状態を変える操作だと明記" grep -q "禁ずるのは\*\*状態を変える操作\*\*" "$R"
+
+# --- PR作成失敗の扱い（旧: 停止する → 新: 止めない） ---
+assert_not "旧: gh 固定の節見出しが残らない" grep -q "^## \`gh pr create\` 失敗" "$EH"
+assert "PR作成失敗でタスクを失敗扱いにしない" grep -q "タスクを失敗扱いにしてはならない" "$EH"
+assert_not "PR失敗で停止する古い指示が残らない" grep -q "ブランチ未プッシュ等の原因を案内して停止する" "$EH"
+assert "Bitbucket で自動作成しないのは失敗ではないと明記" grep -q "これは失敗ではない" "$EH"
+
+# --- 要件指示書 → タスク定義 への受け渡し（訊いて捨てる構図の解消） ---
+assert "Phase 0 で要件指示書のブランチ戦略を写させる" grep -q "その内容をタスク定義へ書き写す" "$S"
+assert "写さなければ確認の意味が消えると警告する" grep -q "要件指示書に書かれたまま放置してはならない" "$S"
+assert "argument-hint に --unattended がある" grep -q -- "--unattended" "$S"
+
+# ------------------------------------------------------------
+echo ""
+echo "[T19] 利用者向け文書の追随（機能を入れて README を忘れる事故の回帰）"
+
+# テンプレートに掟を刻んでも、README/configuration.md が古いままだと
+# 「決めたつもりが伝わっていない」状態になる。実際に二度取り残した
+RM="${REPO_DIR}/README.md"
+CF="${REPO_DIR}/docs/configuration.md"
+
+# 無人運転
+assert "README: --unattended が載る" grep -q -- "--unattended" "$RM"
+assert "README: 待避（PARK）の概念が載る" grep -q "待避（PARK）" "$RM"
+assert "README: 戦況表が載る" grep -q "戦況表" "$RM"
+# Git 運用・PR
+assert "README: フェーズ毎の commit/push が載る" grep -q "フェーズ完了ごとの commit/push" "$RM"
+assert "README: Bitbucket 対応が載る" grep -q "Bitbucket" "$RM"
+assert "README: STAGING確認チェックリストが載る" grep -q "STAGING確認チェックリスト" "$RM"
+# git 操作の排他・ブランチ運用
+assert "README: git 操作の排他が載る" grep -q "git 操作の排他" "$RM"
+assert "README: 粒度（一作業ツリーに一人）が載る" grep -q "一つの作業ツリーにつき、git を触る者は一人" "$RM"
+assert "README: 読み取りは禁じない旨が載る" grep -q "読み取りの \`git diff\` 等は禁じない" "$RM"
+assert "README: ブランチ運用の一元化が載る" grep -q "ブランチ運用の一元化" "$RM"
+assert "README: 決定をタスク定義に記録する旨が載る" grep -q "タスク定義の \`## ブランチ\` に記録する" "$RM"
+# 課題管理連携
+assert "README: 機能マトリクスに無人運転がある" grep -q "無人運転（--unattended" "$RM"
+assert "README: 機能マトリクスに ticket 連携がある" grep -q "課題管理システム連携（ticket" "$RM"
+# 設定文書
+assert "configuration: ticket セクションがある" grep -q "^## ticket（課題管理システム連携・任意）" "$CF"
+assert "configuration: queue のブロックスカラー必須を警告する" grep -q "ブロック形式で書く" "$CF"
+assert "configuration: status_ を入れ子にするなと警告する" grep -q "入れ子（\`status:\` の下）にしてはならない" "$CF"
+assert "configuration: branch_pattern の {type} が載る" grep -q "{type}" "$CF"
+assert "configuration: main/develop が PR先にも配線済みと明記" grep -q "PRの向け先" "$CF"
+
+# ------------------------------------------------------------
+echo ""
 echo "=========================================="
 echo " 結果: PASS=$PASS FAIL=$FAIL"
 if [[ $FAIL -gt 0 ]]; then
