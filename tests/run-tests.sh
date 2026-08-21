@@ -896,9 +896,17 @@ assert "節なし: 一般形で出る" grep -q "確認済みとして次工程�
 assert "節なし: 条件タグが生の文字列で残らない" \
   bash -c '! grep -q "IF_TICKET_STAGING" '"$PJ"
 
-# --- 設定文書 ---
+# --- 利用者向け文書（元の欠陥: 機能を入れて README を忘れる事故が過去に三度） ---
 assert "configuration: staging の状態名が載る" grep -q "status_staging_ok" "${REPO_DIR}/docs/configuration.md"
 assert "configuration: 三つ揃いが条件だと明記" grep -q "三つが揃ったときだけ" "${REPO_DIR}/docs/configuration.md"
+RM3="${REPO_DIR}/README.md"
+assert "README: ticket 連携の節がある" grep -q "^### 課題管理システム連携（ticket・任意）" "$RM3"
+assert "README: 特定システムを前提としないと明記" grep -q "特定の課題管理システムを前提としない" "$RM3"
+assert "README: staging の状態名が載る" grep -q "status_staging_ok" "$RM3"
+assert "README: 三つ揃いが条件だと明記" grep -q "三つが揃ったときだけ" "$RM3"
+assert "README: queue 空なら無効と明記" grep -q "連携は無効" "$RM3"
+assert "README: 節なしなら既存プロジェクトが無傷と明記" grep -q "既存プロジェクトはそのまま動く" "$RM3"
+assert "README: 接続手段は管轄外と明記" grep -q "接続手段（MCP・CLI・API）は枠組みの管轄外" "$RM3"
 
 # ------------------------------------------------------------
 echo ""
