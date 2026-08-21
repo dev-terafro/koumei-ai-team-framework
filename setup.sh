@@ -2010,6 +2010,21 @@ do_setup() {
   echo ""
   log_info "要件整理から始める場合は /${SKILL_PREFIX}-request を使ってください。"
   log_info "要件が明確な場合は /${SKILL_PREFIX}-start で直接タスクを開始できます。"
+  echo ""
+  # モデル配置は「聞かずに知らせる」。初回に8ロール分を問うても、
+  # 消費も出来も見えていない段階では選びようがない。既定で回してから触る性質のもの
+  log_info "モデルはロール別に指定できます（既定はこの配置）:"
+  log_info "  koumei=${MODEL_KOUMEI} / tech-lead=${MODEL_TECH_LEAD_DESIGN}（設計）・${MODEL_TECH_LEAD_IMPLEMENT}（実装） / devils-advocate=${MODEL_DEVILS_ADVOCATE}"
+  if has_role "analyst" || has_role "inquisitor" || has_role "ux-designer" || has_role "scribe"; then
+    _opt=""
+    has_role "analyst"     && _opt="${_opt} analyst=${MODEL_ANALYST}"
+    has_role "inquisitor"  && _opt="${_opt} inquisitor=${MODEL_INQUISITOR}"
+    has_role "ux-designer" && _opt="${_opt} ux-designer=${MODEL_UX_DESIGNER}"
+    has_role "scribe"      && _opt="${_opt} scribe=${MODEL_SCRIBE}"
+    log_info " ${_opt}"
+  fi
+  log_info "  配置の理由は .agents/TEAM.md「配置の原則」に、変え方は docs/configuration.md#models にあります。"
+  log_info "  変更は koumei.config.yaml の models: を編集して setup.sh --update（TEAM.md の直接編集は不可）。"
 }
 
 # ============================================================

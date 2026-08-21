@@ -73,14 +73,41 @@ setup.sh --dry-run     # 実際にファイルを作成せずプレビュー
 
 ### オプションロール
 
-| ロール | 責務 |
-|--------|------|
-| **analyst** | 既存コードベースの調査・分析。移行や大規模リファクタリングで有用 |
-| **inquisitor** | 諫議大夫。設計前に要件・前提・境界条件を詰問し `design-brief` を作成。設計の手戻りが多いプロジェクトで有用 |
-| **ux-designer** | UI/UX設計。tech-lead と並列で設計を実行 |
-| **scribe** | 主簿。成果物の圧縮・構造化（20KB超の再編）、差分パッケージ作成、タスク定義の畳み込み。トークン経済ルールの執行実務。成果物が重くなる大規模タスクで有用 |
+| ロール | 責務 | 既定モデル(claude) |
+|--------|------|------|
+| **analyst** | 既存コードベースの調査・分析。移行や大規模リファクタリングで有用 | sonnet |
+| **inquisitor** | 諫議大夫。設計前に要件・前提・境界条件を詰問し `design-brief` を作成。設計の手戻りが多いプロジェクトで有用 | fable |
+| **ux-designer** | UI/UX設計。tech-lead と並列で設計を実行 | sonnet |
+| **scribe** | 主簿。成果物の圧縮・構造化（20KB超の再編）、差分パッケージ作成、タスク定義の畳み込み。トークン経済ルールの執行実務。成果物が重くなる大規模タスクで有用 | sonnet |
 
 ロール構成は `setup.sh --roles` で変更可能。カスタムロール（api-designer / data-engineer / infra-architect）のテンプレートも `.agents/custom-roles/` に展開されます。
+
+### モデルはロール別に変えられる
+
+**上の「既定モデル」は固定値ではありません。** `koumei.config.yaml` の `models:` で
+**ロールごとに**指定でき、tech-lead は設計と実装で別々に指定できます。
+
+```yaml
+models:
+  koumei: "sonnet"
+  analyst: "agy"                 # 外部CLIへ委譲（Phase 1）
+  inquisitor: "fable"
+  ux-designer: "sonnet"
+  tech-lead-design: "opus"
+  tech-lead-implement: "agy"     # 外部CLIへ委譲（Phase 5）
+  devils-advocate: "fable"
+  scribe: "sonnet"
+```
+
+- 指定できる値: `haiku` / `sonnet` / `opus` / `fable`（またはフルモデルID）、
+  および TEAM.md「外部CLIモデル定義」に登録した名前（`agy` / `agy-high` / `codex` / `grok` 等）
+- 変更は **`koumei.config.yaml` を編集して `setup.sh --update`**。
+  `.agents/TEAM.md` の直接編集は生成物への書き込みであり、hook がブロックし `--update` で消えます
+- **どこに何を置くかの理由**は生成後の `.agents/TEAM.md`「配置の原則」に、
+  設定の詳細は [docs/configuration.md](docs/configuration.md#models) にあります
+
+**まず既定のまま回して、消費と出来が見えてから触るのが順序です。**
+初回に選び分ける材料は、まだ手元にありません。
 
 ## ワークフロー
 
