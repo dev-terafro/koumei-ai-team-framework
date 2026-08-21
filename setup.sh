@@ -1102,6 +1102,27 @@ load_config() {
     GRILLING_ESCALATE="high"
   fi
 
+  # 課題管理システム連携（任意・無人運転で消費される）
+  # 未設定のプロジェクトを壊さないため CONFIG_REQUIRED_KEYS には加えない。
+  # 欠落＝無効として扱い、連携の記述は一切展開しない
+  TICKET_ENABLED=$(yaml_get "ticket.enabled")
+  # queue は引用符・# を含むため multiline 経由で取る（プレーンスカラーだと引用符が剥がれる）
+  TICKET_QUEUE=$(yaml_get_multiline "ticket" "queue")
+  # ネストは2階層まで（awk フォールバックの制約）。status.* ではなく status_* と平らに持つ
+  TICKET_STATUS_DESIGNING=$(yaml_get "ticket.status_designing")
+  TICKET_STATUS_IMPLEMENTING=$(yaml_get "ticket.status_implementing")
+  TICKET_STATUS_REVIEW_READY=$(yaml_get "ticket.status_review_ready")
+  TICKET_STATUS_PARKED=$(yaml_get "ticket.status_parked")
+  if [[ "$TICKET_ENABLED" == "true" ]]; then
+    # 行列の絞り込みを欠いた連携は、他人のチケットまで夜中に拾う。有効化させない
+    if [[ -z "$TICKET_QUEUE" ]]; then
+      log_warn "ticket.enabled: true ですが ticket.queue が空です。無人運転が他の担当者のチケットまで拾うため、連携を無効として扱います。"
+      TICKET_ENABLED="false"
+    fi
+  else
+    TICKET_ENABLED="false"
+  fi
+
   # 開発規約の追加行（任意）
   # ブロックスカラー（dev_rules: |）優先、プレーンスカラー（dev_rules: "..."）にもフォールバック
   # （awk フォールバックパーサーはブロックスカラーしか読めず、yq 有無で挙動が割れるため）
@@ -1184,6 +1205,13 @@ load_config() {
   export KOUMEI_VAR_BUILD_COMMAND="$BUILD_COMMAND"
   export KOUMEI_VAR_CHECK_COMMAND="$CHECK_COMMAND"
   export KOUMEI_VAR_GIT_BRANCH_PATTERN="$GIT_BRANCH_PATTERN"
+  export KOUMEI_VAR_GIT_MAIN_BRANCH="$GIT_MAIN_BRANCH"
+  export KOUMEI_VAR_GIT_DEVELOP_BRANCH="$GIT_DEVELOP_BRANCH"
+  export KOUMEI_VAR_TICKET_QUEUE="$TICKET_QUEUE"
+  export KOUMEI_VAR_TICKET_STATUS_DESIGNING="$TICKET_STATUS_DESIGNING"
+  export KOUMEI_VAR_TICKET_STATUS_IMPLEMENTING="$TICKET_STATUS_IMPLEMENTING"
+  export KOUMEI_VAR_TICKET_STATUS_REVIEW_READY="$TICKET_STATUS_REVIEW_READY"
+  export KOUMEI_VAR_TICKET_STATUS_PARKED="$TICKET_STATUS_PARKED"
   export KOUMEI_VAR_MODEL_KOUMEI="$MODEL_KOUMEI"
   export KOUMEI_VAR_MODEL_ANALYST="$MODEL_ANALYST"
   export KOUMEI_VAR_MODEL_INQUISITOR="$MODEL_INQUISITOR"
@@ -1431,6 +1459,7 @@ process_conditions() {
     my $has_develop = length($ARGV[2]) > 0 ? 1 : 0;
     my $has_check = length($ARGV[3]) > 0 ? 1 : 0;
     my $target_cli = $ARGV[5] // "";
+    my $has_ticket = ($ARGV[6] // "") eq "true" ? 1 : 0;
 
     open(my $fh, "<", $ARGV[4]) or die "Cannot open: $!";
     my @lines = <$fh>;
@@ -1494,6 +1523,26 @@ process_conditions() {
         next;
       }
 
+      # {{#IF_TICKET}}
+      if ($line =~ /\{\{#IF_TICKET\}\}/) {
+        if (@skip_stack && $skip_stack[-1]) {
+          push @skip_stack, 1;
+        } else {
+          push @skip_stack, $has_ticket ? 0 : 1;
+        }
+        next;
+      }
+
+      # {{#IF_NO_TICKET}}
+      if ($line =~ /\{\{#IF_NO_TICKET\}\}/) {
+        if (@skip_stack && $skip_stack[-1]) {
+          push @skip_stack, 1;
+        } else {
+          push @skip_stack, $has_ticket ? 1 : 0;
+        }
+        next;
+      }
+
       # {{#IF_CHECK_COMMAND}}
       if ($line =~ /\{\{#IF_CHECK_COMMAND\}\}/) {
         if (@skip_stack && $skip_stack[-1]) {
@@ -1526,7 +1575,7 @@ process_conditions() {
       }
 
       # Closing tags
-      if ($line =~ /\{\{\/(IF_ROLE|IF_NO_ROLE|IF_MIGRATION|IF_DEVELOP_BRANCH|IF_NO_DEVELOP_BRANCH|IF_CHECK_COMMAND|IF_NO_CHECK_COMMAND|IF_CLI)\}\}/) {
+      if ($line =~ /\{\{\/(IF_ROLE|IF_NO_ROLE|IF_MIGRATION|IF_DEVELOP_BRANCH|IF_NO_DEVELOP_BRANCH|IF_TICKET|IF_NO_TICKET|IF_CHECK_COMMAND|IF_NO_CHECK_COMMAND|IF_CLI)\}\}/) {
         pop @skip_stack if @skip_stack;
         next;
       }
@@ -1538,7 +1587,7 @@ process_conditions() {
     }
 
     print join("\n", @result) . "\n";
-  ' "$roles_csv" "$MIGRATION_ENABLED" "$GIT_DEVELOP_BRANCH" "$CHECK_COMMAND" "$tmpfile_cond" "$TARGET_CLI")
+  ' "$roles_csv" "$MIGRATION_ENABLED" "$GIT_DEVELOP_BRANCH" "$CHECK_COMMAND" "$tmpfile_cond" "$TARGET_CLI" "$TICKET_ENABLED")
 
   rm -f "$tmpfile_cond"
   echo "$content"
