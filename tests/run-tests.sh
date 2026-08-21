@@ -469,6 +469,89 @@ assert "主客転倒しないので exit 0" grep -q "exit=0" <<<"$out"
 
 # ------------------------------------------------------------
 echo ""
+echo "[T14] Git運用とPR作成（派生元の分岐・ホスト差異）"
+
+# gh pr create が必ず --base を伴うか（無指定だと既定ブランチへ向いたPRが立つ）
+gh_always_based() { ! grep "gh pr create" "$1" | grep -qv -- "--base"; }
+
+for sc in dev nodev; do
+  if [[ "$sc" == dev ]]; then
+    make_project "$WORK_DIR/t14-$sc"
+  else
+    make_project "$WORK_DIR/t14-$sc" 's/^  develop_branch:.*/  develop_branch: ""/'
+  fi
+  bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 ($sc)"
+  P=.claude/skills/koumei-start/docs/phases.md
+
+  assert "$sc: Git運用の節が配布される" grep -q "^## Git 運用（全フェーズ共通）" "$P"
+  assert "$sc: 作業ブランチの作成手順がある" grep -q "git checkout -b" "$P"
+  assert "$sc: フェーズ完了ごとの commit/push を命じる" grep -q "フェーズ完了ごとにコミットし、直ちに push" "$P"
+  assert "$sc: 汚れた作業ツリーでの分岐を禁じる" grep -q "git status --porcelain" "$P"
+  assert_not "$sc: 未置換の占位子が残っていない" grep -q "{{" "$P"
+
+  # 派生元の出し分け。ここを誤ると無人の夜に本番ブランチ向けのPRが立つ
+  if [[ "$sc" == dev ]]; then
+    assert "$sc: 派生元・PR先が develop" grep -q "^BASE=develop" "$P"
+    assert_not "$sc: main が漏れ出していない" grep -q "^BASE=main" "$P"
+  else
+    assert "$sc: 派生元・PR先が main" grep -q "^BASE=main" "$P"
+    assert_not "$sc: develop が漏れ出していない" grep -q "^BASE=develop" "$P"
+  fi
+
+  assert "$sc: GitHub は --base 付きで gh を叩く" grep -q 'gh pr create --base' "$P"
+  assert "$sc: --base を欠く gh pr create が無い" gh_always_based "$P"
+  assert "$sc: ホストを見極める分岐がある" grep -qF '*bitbucket.org*) HOST=bitbucket' "$P"
+  assert "$sc: Bitbucket ではPRを自動作成しない" grep -q "自動では作成しない" "$P"
+  assert "$sc: PR作成の失敗でタスクを失敗扱いにしない" grep -q "失敗扱いにしてはならない" "$P"
+done
+
+# --- PR作成URLの組み立てを生成物から抜き出し、実際のリモート表記で走らせる ---
+SLUGSH="$WORK_DIR/slug.sh"
+awk '/^SLUG=\$\(git remote get-url origin/,/\.git\$#/' \
+  "$WORK_DIR/t14-dev/.claude/skills/koumei-start/docs/phases.md" > "$SLUGSH"
+echo 'echo "$SLUG"' >> "$SLUGSH"
+assert "URL組み立てを生成物から抽出できる" test -s "$SLUGSH"
+
+for r in "git@bitbucket.org:acme/repo.git" "https://bitbucket.org/acme/repo.git" "https://bitbucket.org/acme/repo"; do
+  d="$WORK_DIR/t14-url"; rm -rf "$d"; mkdir -p "$d"; cd "$d"
+  git init -q; git remote add origin "$r"
+  assert "URL: $r から acme/repo を得る" test "$(bash "$SLUGSH")" = "acme/repo"
+done
+
+# ------------------------------------------------------------
+echo ""
+echo "[T15] STAGING確認チェックリスト（様式と移植タスクの上乗せ）"
+
+for mg in on off; do
+  if [[ "$mg" == on ]]; then
+    make_project "$WORK_DIR/t15-$mg" 's/^  enabled: false/  enabled: true/'
+  else
+    make_project "$WORK_DIR/t15-$mg"
+  fi
+  bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 (migration=$mg)"
+  P=.claude/skills/koumei-start/docs/phases.md
+
+  assert "mg=$mg: チェックリストの節が配布される" grep -q "STAGING確認チェックリスト" "$P"
+  assert "mg=$mg: 出力先を明記している" grep -q "staging-check.md" "$P"
+  assert "mg=$mg: チケットのコメントにも記すよう命じる" grep -q "チケットのコメントにも記す" "$P"
+  assert "mg=$mg: 期待する結果の空欄を禁じる" grep -q "空欄にしてはならない" "$P"
+  assert "mg=$mg: 事前条件を冒頭に置かせる" grep -q "事前条件は必ず冒頭に置く" "$P"
+  assert "mg=$mg: 回帰を別表に分けさせる" grep -q "回帰は別表に分ける" "$P"
+  assert "mg=$mg: 未検証領域の明記を命じる" grep -q "自動で確かめられなかったことを正直に書く" "$P"
+  assert "mg=$mg: 判定の行き先が三分岐" grep -q "判断に迷う" "$P"
+  assert "mg=$mg: 種別ごとの項目数上限がある" grep -q "バグ修正（中） | 4〜6" "$P"
+  assert "mg=$mg: PR作成の節番が繰り下がっている" grep -q "^### 3. PR作成" "$P"
+
+  # 移植の上乗せ。移行元との突き合わせを欠いた移植確認は何も確認していない
+  if [[ "$mg" == on ]]; then
+    assert "mg=$mg: 移行元との突き合わせを必須にする" grep -q "移行元との突き合わせ" "$P"
+  else
+    assert_not "mg=$mg: 非移植PJに移植専用の掟が漏れない" grep -q "移行元との突き合わせ" "$P"
+  fi
+done
+
+# ------------------------------------------------------------
+echo ""
 echo "=========================================="
 echo " 結果: PASS=$PASS FAIL=$FAIL"
 if [[ $FAIL -gt 0 ]]; then
