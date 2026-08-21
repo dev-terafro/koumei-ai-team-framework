@@ -855,6 +855,53 @@ assert "configuration: pro が格上げにならないと書く" grep -q "格上
 assert_not "configuration: agy-pro が残らない" grep -q "agy-pro" "$CF2"
 # ------------------------------------------------------------
 echo ""
+echo "[T21] STAGING確認の判定が現場の状態名で出るか（issue #23）"
+
+STG_ON='/^ticket:/,/^$/s/^  enabled: false/  enabled: true/'
+STG_Q='s|^  queue: ""|  queue: \|\n    status = "AI-READY" AND assignee = currentUser()|'
+
+# --- ticket 無効: 一般形で出る（既存プロジェクトを壊さない） ---
+make_project "$WORK_DIR/t21-off"
+bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 (T21 off)"
+PJ=.claude/skills/koumei-start/docs/phases.md
+assert "無効: 判定が一般形で出る" grep -q "確認済みとして次工程へ進める" "$PJ"
+assert_not "無効: Jira 語彙がハードコードされて残らない" grep -q "本番デプロイ待ち" "$PJ"
+assert "無効: 設定すれば実名で出る旨を案内する" grep -q "status_staging_ok" "$PJ"
+
+# --- 三つ揃い: 実際の状態名で出る ---
+make_project "$WORK_DIR/t21-on" "$STG_ON" "$STG_Q" \
+  's|^  status_parked: ""|  status_parked: "ペンディング"|' \
+  's|^  status_staging_ok: ""|  status_staging_ok: "本番デプロイ待ち"|' \
+  's|^  status_staging_ng: ""|  status_staging_ng: "PR実装の差し戻し"|'
+bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 (T21 on)"
+assert "有効: 合格の遷移先が設定値で出る" grep -q "チケットを \*\*本番デプロイ待ち\*\* へ" "$PJ"
+assert "有効: 不合格の遷移先が設定値で出る" grep -q "\*\*PR実装の差し戻し\*\* へ移し" "$PJ"
+assert "有効: 保留の遷移先が設定値で出る" grep -q "\*\*ペンディング\*\* へ" "$PJ"
+assert_not "有効: 一般形は出ない" grep -q "確認済みとして次工程へ進める" "$PJ"
+assert "有効: 言い換えるなと戒める" grep -q "勝手に言い換えてはならない" "$PJ"
+
+# --- 一つ欠け: 空の遷移指示を出さず一般形へ落ちる ---
+make_project "$WORK_DIR/t21-partial" "$STG_ON" "$STG_Q" \
+  's|^  status_parked: ""|  status_parked: "ペンディング"|' \
+  's|^  status_staging_ok: ""|  status_staging_ok: "本番デプロイ待ち"|'
+bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 (T21 partial)"
+assert "欠け: 一般形へ落ちる" grep -q "確認済みとして次工程へ進める" "$PJ"
+assert_not "欠け: 空の遷移指示を出さない" grep -qE '\*\*\s*\*\* へ' "$PJ"
+assert_not "欠け: 中途半端に片方だけ出さない" grep -q "チケットを \*\*本番デプロイ待ち\*\* へ" "$PJ"
+
+# --- 後方互換: ticket 節を持たない既存プロジェクト ---
+make_project "$WORK_DIR/t21-legacy" '/^ticket:/,/^$/d'
+bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 (T21 legacy)"
+assert "節なし: 一般形で出る" grep -q "確認済みとして次工程へ進める" "$PJ"
+assert "節なし: 条件タグが生の文字列で残らない" \
+  bash -c '! grep -q "IF_TICKET_STAGING" '"$PJ"
+
+# --- 設定文書 ---
+assert "configuration: staging の状態名が載る" grep -q "status_staging_ok" "${REPO_DIR}/docs/configuration.md"
+assert "configuration: 三つ揃いが条件だと明記" grep -q "三つが揃ったときだけ" "${REPO_DIR}/docs/configuration.md"
+
+# ------------------------------------------------------------
+echo ""
 echo "=========================================="
 echo " 結果: PASS=$PASS FAIL=$FAIL"
 if [[ $FAIL -gt 0 ]]; then
