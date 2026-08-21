@@ -95,6 +95,13 @@ ticket:
   status_implementing: ""            # 実装・コードレビューフェーズの間  例: "AI-PROGRESS"
   status_review_ready: ""            # AIの作業完了・PR待ち              例: "AI-PR"
   status_parked: ""                  # 待避（AIが判断できず手を止めた）  例: "ペンディング"
+  # Phase 7 の STAGING確認チェックリストの判定先。
+  # 判定は「合格・不合格・保留」の三つの行き先を持つ。
+  # status_staging_ok / status_staging_ng / status_parked の三つが揃ったときだけ、
+  # チェックリストの判定が状態遷移の指示として生成される。
+  # 一つでも空なら、判定は「その現場の言葉で書く」一般形のまま出る
+  status_staging_ok: ""              # ステージング確認 合格             例: "本番デプロイ待ち"
+  status_staging_ng: ""              # ステージング確認 不合格（差し戻し）例: "PR実装の差し戻し"
 
 # === 技術スタック ===
 tech_stack:

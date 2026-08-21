@@ -148,7 +148,9 @@ AIがコードを書く際に従う技術情報と、実装後の検証コマン
 | `status_designing` | 分析・詰問・設計フェーズの間の状態名 |
 | `status_implementing` | 実装・コードレビューフェーズの間の状態名 |
 | `status_review_ready` | AIの作業完了・PR待ちの状態名 |
-| `status_parked` | 待避（AIが判断できず手を止めた）の状態名 |
+| `status_parked` | 待避（AIが判断できず手を止めた）の状態名。Phase 7 の「判断に迷う」の行き先も兼ねる |
+| `status_staging_ok` | Phase 7 STAGING確認 **合格**（例: `本番デプロイ待ち`） |
+| `status_staging_ng` | Phase 7 STAGING確認 **不合格・差し戻し**（例: `PR実装の差し戻し`） |
 
 状態名は**その現場で実際に使われている名**を書く。空欄の項目は遷移させない。
 `status_*` を入れ子（`status:` の下）にしてはならない — yq が無い環境のフォールバックパーサーは2階層までしか読めず、黙って空を返す。
@@ -162,7 +164,21 @@ ticket:
   status_implementing: "AI-PROGRESS"
   status_review_ready: "AI-PR"
   status_parked: "ペンディング"
+  status_staging_ok: "本番デプロイ待ち"
+  status_staging_ng: "PR実装の差し戻し"
 ```
+
+### STAGING確認の判定先（Phase 7）
+
+Phase 7 の STAGING確認チェックリストは「合格・不合格・保留」の三つの行き先を持つ。
+その行き先は `status_staging_ok` / `status_staging_ng` / `status_parked` から展開される。
+
+**この三つが揃ったときだけ**、判定が状態遷移の指示として生成される。
+一つでも空なら、判定は現場の言葉で書くための一般形のまま出る。
+
+片方だけ設定できる作りにすると `**  ** へ移す` という空の指示が生成物に出る。
+確認する人はそれを読んで手が止まる。中途半端に出すくらいなら、
+一般形のまま出して人に書かせるほうが確実である。
 
 ## output（成果物の2層構成）
 
