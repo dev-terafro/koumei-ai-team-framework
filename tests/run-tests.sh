@@ -1212,6 +1212,105 @@ assert "configuration: 無人運転は起動しないと載る" \
 
 # ------------------------------------------------------------
 echo ""
+echo "[T26] ウィザードが ticket 節を書き出し、状態名マップを取り込めるか（issue #27）"
+
+# ウィザードは対話式。既定値（改行）または y を流し込んで走らせる
+wizard() {   # wizard <dir> <answers: blank|yes> [追加引数...]
+  local dir="$1" ans="$2"; shift 2
+  rm -rf "$dir" && mkdir -p "$dir" && cd "$dir" && git init -q
+  git config user.email t@t.local; git config user.name t
+  if [[ "$ans" == "yes" ]]; then
+    yes y | head -100 | bash "$SETUP" --init "$@" > wizard.log 2>&1
+  else
+    printf '\n%.0s' $(seq 1 100) | bash "$SETUP" --init "$@" > wizard.log 2>&1
+  fi
+}
+
+MAPDIR="$WORK_DIR/t26-home/.koumei"
+mkdir -p "$MAPDIR"
+cat > "$MAPDIR/ticket-status-map.yaml" <<'MAPEOF'
+# 組織で共有する状態名マップ
+status_designing:    "AI-PLANREVIEW"
+status_implementing: "AI-PROGRESS"
+status_review_ready: "AI-PR"
+status_parked:       "ペンディング"
+status_staging_ok:   "本番デプロイ待ち"
+status_staging_ng:   "PR実装の差し戻し"
+queue: "共有ファイルに置いてはならない行列条件"
+MAPEOF
+
+# --- 連携「しない」でも節を書き出す（元の欠陥: ticket 節が一行も出なかった） ---
+wizard "$WORK_DIR/t26-no" blank
+assert "しない: ticket 節が書き出される" grep -q "^ticket:" koumei.config.yaml
+assert "しない: enabled は false" grep -q "^  enabled: false" koumei.config.yaml
+for k in queue status_designing status_implementing status_review_ready \
+         status_parked status_staging_ok status_staging_ng; do
+  assert "しない: $k の枠がある" grep -q "^  ${k}:" koumei.config.yaml
+done
+assert "しない: 入れ子禁止の理由が添う" grep -q "status_\* は入れ子にしないこと" koumei.config.yaml
+assert "しない: 行列を絞る理由が添う" grep -q "必ず自分の担当に絞ること" koumei.config.yaml
+assert "しない: 空 queue で無人運転が止まる旨が添う" grep -q "無人運転は起動せず報告して終える" koumei.config.yaml
+# 生成した config が実際に読めること（枠だけ作って壊れていては意味がない）
+assert "しない: 生成 config で --update が通る" bash -c 'bash "'"$SETUP"'" --update > up.log 2>&1'
+assert "しない: --update が config を書き換えない" \
+  bash -c 'cp koumei.config.yaml /tmp/_k26 && bash "'"$SETUP"'" --update >/dev/null 2>&1 && diff -q /tmp/_k26 koumei.config.yaml'
+
+# --- 連携「する」 ---
+wizard "$WORK_DIR/t26-yes" yes
+assert "する: enabled は true" grep -q "^  enabled: true" koumei.config.yaml
+assert "する: queue が | ブロック形式で書かれる" grep -q "^  queue: |$" koumei.config.yaml
+
+# --- 既定パスのマップを見つけて埋める ---
+HOME_BAK="$HOME"; export HOME="$WORK_DIR/t26-home"
+wizard "$WORK_DIR/t26-map" blank
+assert "既定マップ: 読み込んだと報告する" grep -q "状態名マップを読み込みました" wizard.log
+assert "既定マップ: status_parked が入る" grep -q 'status_parked: "ペンディング"' koumei.config.yaml
+assert "既定マップ: status_staging_ok が入る" grep -q 'status_staging_ok: "本番デプロイ待ち"' koumei.config.yaml
+assert "既定マップ: status_staging_ng が入る" grep -q 'status_staging_ng: "PR実装の差し戻し"' koumei.config.yaml
+assert "既定マップ: status_designing が入る" grep -q 'status_designing: "AI-PLANREVIEW"' koumei.config.yaml
+# queue はプロジェクト固有。共有ファイルから入れれば他人のチケットを拾う事故を招く
+assert "既定マップ: queue は取り込まない" grep -q '^  queue: ""' koumei.config.yaml
+assert "既定マップ: queue を無視した旨を告げる" grep -q "queue がありますが取り込みません" wizard.log
+export HOME="$HOME_BAK"
+
+# --- --ticket-map の二形式 ---
+wizard "$WORK_DIR/t26-arg" blank --ticket-map "$MAPDIR/ticket-status-map.yaml"
+assert "--ticket-map <path>: 取り込まれる" grep -q 'status_parked: "ペンディング"' koumei.config.yaml
+wizard "$WORK_DIR/t26-eq" blank "--ticket-map=$MAPDIR/ticket-status-map.yaml"
+assert "--ticket-map=path: 取り込まれる" grep -q 'status_parked: "ペンディング"' koumei.config.yaml
+
+# --- 明示したのに読めない → 黙って空で進めず止まる ---
+wizard "$WORK_DIR/t26-bad" blank --ticket-map "$WORK_DIR/nope.yaml"
+assert "読めないマップ: 失敗で終わる" test ! -f koumei.config.yaml
+assert "読めないマップ: 理由を告げる" grep -q "指定したファイルを読めません" wizard.log
+wizard "$WORK_DIR/t26-noval" blank --ticket-map
+assert "値なし: 失敗で終わる" test ! -f koumei.config.yaml
+assert "値なし: 理由を告げる" grep -q "ファイルパスが必要です" wizard.log
+
+# --- 既定パスが無い環境で壊れない ---
+HOME_BAK="$HOME"; export HOME="$WORK_DIR/t26-nohome"; mkdir -p "$HOME"
+wizard "$WORK_DIR/t26-nomap" blank
+assert "マップ無し: 節は出るが値は空" grep -q '^  status_parked: ""' koumei.config.yaml
+assert "マップ無し: 置き場所を案内する" grep -q "ticket-status-map.yaml" wizard.log
+export HOME="$HOME_BAK"
+
+# --- --help に載る（存在に気づけないと使われない） ---
+assert "--help に --ticket-map が載る" bash -c 'bash "'"$SETUP"'" --help | grep -q -- "--ticket-map"'
+assert "--help が生成時に読まない旨を述べる" \
+  bash -c 'bash "'"$SETUP"'" --help | grep -q "never read at generation"'
+assert "--help が queue を取り込まない旨を述べる" \
+  bash -c 'bash "'"$SETUP"'" --help | grep -q "queue.* is never imported"'
+
+# --- 利用者向け文書の追随 ---
+RM6="${REPO_DIR}/README.md"
+assert "README: どちらでも節を書き出すと載る" grep -q "どちらでも \`ticket:\` 節を書き出します" "$RM6"
+assert "README: 状態名マップの例が載る" grep -q "ticket-status-map.yaml" "$RM6"
+assert "README: 読めなければ止まると載る" grep -q "指定したのに読めなければ止まります" "$RM6"
+assert "README: 生成時に読まない理由が載る" grep -q "違う生成物ができてしまいます" "$RM6"
+assert "README: queue を取り込まない理由が載る" grep -q "絞り込みの共有＝事故" "$RM6"
+
+# ------------------------------------------------------------
+echo ""
 echo "=========================================="
 echo " 結果: PASS=$PASS FAIL=$FAIL"
 if [[ $FAIL -gt 0 ]]; then
