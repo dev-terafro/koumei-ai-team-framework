@@ -35,8 +35,15 @@ log_step()  { echo -e "${BLUE}[STEP]${NC} $1"; }
 # --- 引数処理 ---
 MODE="setup"
 DRY_RUN=false
+TICKET_MAP_ARG=""
+TICKET_MAP_DEFAULT="${HOME}/.koumei/ticket-status-map.yaml"
 
+_expect_ticket_map=false
 for arg in "$@"; do
+  # for ループでは shift が効かないため、値は次の周回で受ける
+  if [[ "$_expect_ticket_map" == true ]]; then
+    TICKET_MAP_ARG="$arg"; _expect_ticket_map=false; continue
+  fi
   case "$arg" in
     --init)      MODE="init" ;;
     --reconfig)  MODE="init" ;;
@@ -45,6 +52,8 @@ for arg in "$@"; do
     --update)    MODE="update" ;;
     --clean)     MODE="clean" ;;
     --dry-run)   DRY_RUN=true ;;
+    --ticket-map)   _expect_ticket_map=true ;;
+    --ticket-map=*) TICKET_MAP_ARG="${arg#*=}" ;;
     --help|-h)
       echo "koumei-ai-team-framework setup v${VERSION}"
       echo ""
@@ -62,11 +71,21 @@ for arg in "$@"; do
       echo "              you to run --reconfig instead of silently skipping them."
       echo "  --clean     Remove all generated files"
       echo "  --dry-run   Preview without creating files"
+      echo "  --ticket-map <path>"
+      echo "              Fill the wizard's ticket status names from a shared map file"
+      echo "              (default: ~/.koumei/ticket-status-map.yaml when present)."
+      echo "              The map seeds koumei.config.yaml; it is never read at generation"
+      echo "              time, so anyone can run setup.sh and get the same output."
+      echo "              'queue' is never imported -- narrowing the queue is per-project."
       echo "  --help      Show this help"
       exit 0
       ;;
   esac
 done
+if [[ "$_expect_ticket_map" == true ]]; then
+  log_error "--ticket-map にはファイルパスが必要です。"
+  exit 1
+fi
 
 # ============================================================
 # 対話式セットアップウィザード
@@ -561,6 +580,78 @@ run_wizard() {
     output_inst_yaml="  instructions: \"\""
   fi
 
+  # --- 課題管理システム連携 ---
+  #
+  # Yes / No のどちらでも節を書き出す。節が無い config と enabled:false の config は
+  # 生成物としては同一だが、利用者にとっては全く違う。枠があればコメントごと目に入り、
+  # キーの綴りも「入れ子にしない」という制約も一緒に伝わる。
+  # 後から自力で書き足させると、間違えても黙って空を返すため気づけない。
+  echo ""
+  log_info "課題管理システム連携（無人運転で使用。後から変更できます）"
+
+  read_ticket_map ""          # 変数を必ず初期化する（マップ無しでも空文字で揃える）
+  local ticket_map_path="" ticket_map_explicit="false"
+  if [[ -n "$TICKET_MAP_ARG" ]]; then
+    ticket_map_path="$TICKET_MAP_ARG"; ticket_map_explicit="true"
+  elif [[ -r "$TICKET_MAP_DEFAULT" ]]; then
+    ticket_map_path="$TICKET_MAP_DEFAULT"
+  fi
+
+  if [[ -n "$ticket_map_path" ]]; then
+    if read_ticket_map "$ticket_map_path"; then
+      log_info "  状態名マップを読み込みました: ${ticket_map_path}"
+    elif [[ "$ticket_map_explicit" == "true" ]]; then
+      # 明示したのに読めないなら止める。黙って空で進めば、
+      # 「マップから入ったつもりの空欄」が残り、遷移しない理由が判らなくなる
+      log_error "--ticket-map で指定したファイルを読めません: ${ticket_map_path}"
+      exit 1
+    fi
+  fi
+
+  local t_enabled="false" t_queue=""
+  if prompt_yn "  課題管理システムと連携しますか？（チケットで行列を作り、状態を遷移させます）"; then
+    t_enabled="true"
+    echo ""
+    log_info "  行列の条件は「必ず自分の担当に絞る」こと。絞らなければ夜中に他の担当者のチケットまで拾います。"
+    log_info "  例: status = \"AI-READY\" AND assignee = currentUser()"
+    t_queue=$(prompt_input "  行列の条件（空欄なら後で config に書く）" "")
+  fi
+  if [[ "$TICKET_MAP_LOADED" != "true" ]]; then
+    # 連携しない場合にも告げる。節は必ず書き出されるので、後から有効にする人が居る。
+    # そのとき状態名7項目を手入力させれば、間違いを撒くだけである
+    log_info "  状態名は config の ticket 節に後から書けます。"
+    log_info "  組織で共通なら ${TICKET_MAP_DEFAULT} に置くと、次回から自動で埋まります（--ticket-map でも指定可）。"
+  fi
+
+  local t_queue_yaml='  queue: ""'
+  if [[ -n "$t_queue" ]]; then
+    # 引用符や # を含むため必ず | ブロック形式。プレーンスカラーは yq 無し環境で壊れる
+    t_queue_yaml="  queue: |
+    ${t_queue}"
+  fi
+
+  local ticket_yaml
+  ticket_yaml="# === 課題管理システム連携（任意） ===
+# 無人運転（/${skill_prefix}-start --unattended）で消費される。
+# 接続手段（MCP・CLI・API）は枠組みの管轄外。ここで定めるのは
+# 「どこから引き、いつ何処へ動かすか」のみ。
+# status_* は入れ子にしないこと（yq 無し環境のパーサは2階層までしか読めず黙って空を返す）
+ticket:
+  enabled: ${t_enabled}
+  # 無人運転が引く行列の条件。必ず自分の担当に絞ること。
+  # 空欄のまま enabled: true にすると連携は無効となり、無人運転は起動せず報告して終える
+  # ※ 引用符や # を含むため、必ず | ブロック形式で記述すること
+${t_queue_yaml}
+  # この現場で実際に使われている状態名を書く。空欄の項目は遷移させない
+  status_designing: \"${MAP_STATUS_DESIGNING}\"
+  status_implementing: \"${MAP_STATUS_IMPLEMENTING}\"
+  status_review_ready: \"${MAP_STATUS_REVIEW_READY}\"
+  status_parked: \"${MAP_STATUS_PARKED}\"
+  # 下の三つ（staging_ok / staging_ng / parked）が揃ったときだけ、
+  # Phase 7 のSTAGING確認チェックリストが状態遷移の指示として生成される
+  status_staging_ok: \"${MAP_STATUS_STAGING_OK}\"
+  status_staging_ng: \"${MAP_STATUS_STAGING_NG}\""
+
   cat > "$CONFIG_FILE" << YAML_EOF
 # ============================================================
 # koumei-ai-team-framework 設定ファイル
@@ -640,6 +731,8 @@ git:
   branch_pattern: "${git_branch_pattern}"
   dev_rules: ""                      # TEAM.md の開発規約に追記する行（任意・複数行は | 形式で）
 
+${ticket_yaml}
+
 # === カスタム指示（各ロールの指示ファイルに追記される） ===
 custom_instructions:
   koumei: ""
@@ -656,6 +749,47 @@ YAML_EOF
 
   log_info "koumei.config.yaml を生成しました。"
   echo ""
+}
+
+# 状態名マップを読む
+#
+# 状態名の対応表は「組織の事実」であってプロジェクトの事実ではない。同じワークフローを
+# 使う限り全プロジェクト共通であり、7項目をプロジェクトごとに手入力するのは間違いを撒く作業。
+#
+# **マップは「設定を書くための材料」であって、生成時に読むものではない。**
+# 生成時に読む方式にすると、マップを持たない人が同じリポジトリで setup.sh を叩いたとき
+# 違う生成物ができる。書き込み方式なら config が自己完結し、誰が叩いても同じものが出る。
+#
+# queue は取り込まない。行列条件はプロジェクト固有であり、「自分の担当に絞る」ことが
+# 安全性の根拠である。共有ファイルに置けば、絞り込みの共有＝他人のチケットを夜中に拾う事故を招く。
+read_ticket_map() {
+  local path="$1"
+  TICKET_MAP_LOADED="false"
+  MAP_STATUS_DESIGNING=""; MAP_STATUS_IMPLEMENTING=""; MAP_STATUS_REVIEW_READY=""
+  MAP_STATUS_PARKED="";    MAP_STATUS_STAGING_OK="";   MAP_STATUS_STAGING_NG=""
+  [[ -z "$path" ]] && return 0
+  [[ -r "$path" ]] || return 1
+
+  local k v
+  while IFS= read -r line; do
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+    [[ "$line" =~ ^[[:space:]]*([a-z_]+)[[:space:]]*:[[:space:]]*(.*)$ ]] || continue
+    k="${BASH_REMATCH[1]}"; v="${BASH_REMATCH[2]}"
+    v="${v%%#*}"                                  # 行末コメントを落とす
+    v="$(printf '%s' "$v" | sed 's/[[:space:]]*$//')"
+    v="${v%\"}"; v="${v#\"}"                       # 引用符を剥がす
+    case "$k" in
+      status_designing)    MAP_STATUS_DESIGNING="$v" ;;
+      status_implementing) MAP_STATUS_IMPLEMENTING="$v" ;;
+      status_review_ready) MAP_STATUS_REVIEW_READY="$v" ;;
+      status_parked)       MAP_STATUS_PARKED="$v" ;;
+      status_staging_ok)   MAP_STATUS_STAGING_OK="$v" ;;
+      status_staging_ng)   MAP_STATUS_STAGING_NG="$v" ;;
+      queue) log_warn "状態名マップに queue がありますが取り込みません（行列条件はプロジェクト固有のため）。" ;;
+    esac
+  done < "$path"
+  TICKET_MAP_LOADED="true"
+  return 0
 }
 
 # ロール変更ウィザード（既存config のロール部分だけ書き換え）
