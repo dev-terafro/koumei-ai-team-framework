@@ -61,7 +61,29 @@ tech-lead は**フェーズ分割**（設計と実装で別モデル）。配置
 | `devils-advocate` | **fable** | レビューVERDICTは品質ゲート。誤判定コストが最大 |
 | `scribe` | sonnet | 要約・選別は原文の理解を要し、取りこぼしは下流で検知できない。haiku は重い資料の書き出しで停止する実測があるため充てない |
 
-指定可能な値: `haiku` / `sonnet` / `opus` / `fable`（またはフルモデルID）、および TEAM.md「外部CLIモデル定義」に登録した外部モデル名（`agy` / `agy-pro` / `codex` / `grok` 等。この場合 Agent tool ではなく Bash 経由で起動される）。
+指定可能な値: `haiku` / `sonnet` / `opus` / `fable`（またはフルモデルID）、および TEAM.md「外部CLIモデル定義」に登録した外部モデル名（`agy` / `agy-high` / `codex` / `grok` 等。この場合 Agent tool ではなく Bash 経由で起動される）。
+
+### 外部CLI委譲を指定したときの要件
+
+外部モデル名を指定すると Bash 経由の起動になり、Agent tool とは前提が変わる。
+**委譲が動かない場合は Claude へ自動フォールバックするため、不備が表に出にくい。**
+以下は setup.sh が自動で整えるが、手で settings.json を管理している場合は確認すること。
+
+| 要件 | 無いとどうなるか |
+|------|------------------|
+| `.claude/settings.json` の `permissions.allow` に委譲コマンド | ヘッドレスで承認要求に阻まれ、**一度も実行されない** |
+| `--add-dir "$PWD"`（agy） | cwd がワークスペースにならず、**実装が消える** |
+| `run_in_background` での起動 | 前景の Bash が既定2分（上限10分）で打ち切る |
+| 差分・ビルドでの成否判定 | 委譲先の `status` は成功時も `ERROR` を返すことがある |
+| `usage.total_tokens == 0` の検出 | 「委譲したつもりで一度も動いていない」状態に気づけない |
+
+**モデルは TEAM.md 側で明示指定すること。** `--model` を省くと利用者のグローバル設定
+（`~/.gemini/antigravity-cli/settings.json` 等）に依存し、他用途で変えた瞬間に
+プロジェクトの実装モデルが黙って変わる。
+
+なお agy の `pro` 系は 3.1 世代で止まっており、`flash` は 3.7 まで来ている。
+**「pro に上げる」は格上げにならない。** 推論を強めたい場合は
+`agy-high`（`gemini-3.7-flash-high`）のように同世代で effort を上げる。
 
 ## review
 

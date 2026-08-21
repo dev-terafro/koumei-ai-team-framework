@@ -745,6 +745,108 @@ assert "configuration: status_ を入れ子にするなと警告する" grep -q 
 assert "configuration: branch_pattern の {type} が載る" grep -q "{type}" "$CF"
 assert "configuration: main/develop が PR先にも配線済みと明記" grep -q "PRの向け先" "$CF"
 
+
+# ------------------------------------------------------------
+echo ""
+echo "[T20] 外部CLI委譲が実際に動く形になっているか（黙って Claude へ落ちる事故の回帰）"
+
+# --- テンプレート側 ---
+assert "settings テンプレに permissions.allow がある" \
+  jq -e '.permissions.allow | length > 0' "${REPO_DIR}/templates/claude/settings.json"
+assert "settings テンプレが agy を許可する" \
+  jq -e '.permissions.allow | index("Bash(agy -p:*)")' "${REPO_DIR}/templates/claude/settings.json"
+assert "settings テンプレが codex を許可する" \
+  jq -e '.permissions.allow | index("Bash(codex exec:*)")' "${REPO_DIR}/templates/claude/settings.json"
+
+# --- 新規プロジェクト（cp 経路） ---
+make_project "$WORK_DIR/t20a"
+bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 (T20a)"
+assert "新規: 生成された settings.json が agy を許可する" \
+  jq -e '.permissions.allow | index("Bash(agy -p:*)")' .claude/settings.json
+
+# --- 既存 settings.json がある場合（マージ経路。元の欠陥: hooks キーしか拾わず permissions が落ちた） ---
+make_project "$WORK_DIR/t20b"
+mkdir -p .claude
+cat > .claude/settings.json <<'EXISTING'
+{
+  "permissions": { "allow": ["Bash(echo hello)"], "deny": ["Bash(rm -rf /)"] },
+  "env": { "MY_VAR": "keep-me" }
+}
+EXISTING
+bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 (T20b)"
+assert "既存あり: agy の許可が追加される" \
+  jq -e '.permissions.allow | index("Bash(agy -p:*)")' .claude/settings.json
+assert "既存あり: 元の許可が保たれる" \
+  jq -e '.permissions.allow | index("Bash(echo hello)")' .claude/settings.json
+assert "既存あり: 元の deny が消えない" \
+  jq -e '.permissions.deny | index("Bash(rm -rf /)")' .claude/settings.json
+assert "既存あり: 無関係のキーが消えない" \
+  jq -e '.env.MY_VAR == "keep-me"' .claude/settings.json
+assert "既存あり: hooks も入る" jq -e '.hooks.PreToolUse' .claude/settings.json
+
+# --- 既存 hooks があっても permissions は入る（hooks は手動マージを促すだけ） ---
+make_project "$WORK_DIR/t20c"
+mkdir -p .claude
+echo '{"hooks":{"PreToolUse":[{"matcher":"MyOwn","hooks":[]}]}}' > .claude/settings.json
+bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 (T20c)"
+assert "既存hooks: permissions は入る" \
+  jq -e '.permissions.allow | index("Bash(agy -p:*)")' .claude/settings.json
+assert "既存hooks: 利用者の hooks を上書きしない" \
+  jq -e '.hooks.PreToolUse[0].matcher == "MyOwn"' .claude/settings.json
+
+# --- 呼び出し方法（TEAM.md） ---
+make_project "$WORK_DIR/t20d"
+bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 (T20d)"
+TMD=.agents/TEAM.md
+PH=.claude/skills/koumei-start/docs/phases.md
+RL=.claude/skills/koumei-start/docs/rules.md
+UN=.claude/skills/koumei-start/docs/unattended.md
+
+assert "TEAM.md: agy に --add-dir がある" grep -q -- '--add-dir "\$PWD"' "$TMD"
+assert "TEAM.md: agy にモデル明示がある" grep -q -- "--model gemini-3.7-flash-medium" "$TMD"
+assert "TEAM.md: agy に --print-timeout がある" grep -q -- "--print-timeout 30m" "$TMD"
+assert "TEAM.md: agy に --output-format json がある" grep -q -- "--output-format json" "$TMD"
+assert_not "TEAM.md: 存在しない gemini-3.5-pro が残らない" grep -q "gemini-3.5-pro" "$TMD"
+assert_not "TEAM.md: agy-pro が残らない" grep -q "^| agy-pro " "$TMD"
+assert "TEAM.md: agy-high がある" grep -q "^| agy-high " "$TMD"
+assert "TEAM.md: 三つの落とし穴が書かれている" grep -q "agy の三つの落とし穴" "$TMD"
+assert "TEAM.md: --add-dir 無しで消えると警告する" grep -q "scratch" "$TMD"
+assert "TEAM.md: status を判定に使うなと書く" grep -q "status\` は成否の判定に使えない" "$TMD"
+assert "TEAM.md: 消費ゼロが未実行の署名だと書く" grep -q "usage.total_tokens\` が 0" "$TMD"
+
+# --- 背景実行（前景の2分/10分制限を避ける） ---
+assert "phases: agy委譲が run_in_background を指示する" grep -q "run_in_background" "$PH"
+assert "phases: 前景禁止の理由（2分・10分）を書く" grep -q "既定2分" "$PH"
+assert_not "phases: 前景で実行させる古い記述が残らない" \
+  grep -q 'Bash tool で `agy -p "{指示プロンプト}" --dangerously-skip-permissions` を実行' "$PH"
+assert "phases: Codex 委譲も背景実行にする" \
+  bash -c 'awk "/^### Codex委譲モード/,/^\*\*実行後/" '"$PH"' | grep -q run_in_background'
+
+# --- 成否の判定（status を信じない） ---
+assert "phases: 一次判定が git の差分である" grep -q "git status --porcelain" "$PH"
+assert "phases: status を合否に使うなと明記" grep -q "status\` と終了コードを合否の判定に使ってはならない" "$PH"
+assert "phases: 成功時も ERROR が返ると書く" grep -q "status: ERROR\`、終了コード 0 が返る" "$PH"
+assert "phases: 消費ゼロで停止させる" grep -q "usage.total_tokens\` が 0" "$PH"
+assert "phases: 設定不備をフォールバックで隠すなと書く" grep -q "自動フォールバックで隠してはならない" "$PH"
+
+# --- 背景実行中の作業ツリー不可侵 ---
+assert "rules: 背景実行中の不可侵が立つ" grep -q "背景実行している間" "$RL"
+assert "rules: 待ちが不可侵の時間だと書く" grep -q "不可侵の時間" "$RL"
+assert "phases: 待機中に触れるなと書く" grep -q "作業ツリーに一切触れてはならない" "$PH"
+assert "unattended: 待機中に次タスクへ進むなと書く" grep -q "行列の次のタスクへ着手してはならない" "$UN"
+assert "unattended: 設定不備は待避させる" grep -q "一度も動かなかった" "$UN"
+
+# --- 利用者向け文書の追随 ---
+RM2="${REPO_DIR}/README.md"
+CF2="${REPO_DIR}/docs/configuration.md"
+assert "README: 外部CLI委譲の要件が載る" grep -q "外部CLI委譲の要件" "$RM2"
+assert "README: --add-dir が載る" grep -q -- '--add-dir "\$PWD"' "$RM2"
+assert "README: 背景実行が載る" grep -q "run_in_background" "$RM2"
+assert "README: 差分で判定する旨が載る" grep -q "成否は差分で判定する" "$RM2"
+assert "README: 消費ゼロの署名が載る" grep -q "消費ゼロは設定不備の署名" "$RM2"
+assert "configuration: 委譲の要件表がある" grep -q "外部CLI委譲を指定したときの要件" "$CF2"
+assert "configuration: pro が格上げにならないと書く" grep -q "格上げにならない" "$CF2"
+assert_not "configuration: agy-pro が残らない" grep -q "agy-pro" "$CF2"
 # ------------------------------------------------------------
 echo ""
 echo "=========================================="
