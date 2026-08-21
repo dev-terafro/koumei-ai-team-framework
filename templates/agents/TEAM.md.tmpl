@@ -83,12 +83,17 @@
 |---------|------------|------|
 | codex | `codex exec "{プロンプト}"` | OpenAI Codex CLI。モデルは `~/.codex/config.toml` の `model` に従う |
 | gpt-5.6-sol | `codex exec -m gpt-5.6-sol "{プロンプト}"` | codex CLI 経由でモデルを固定する例。`-m {モデルID}` で任意のモデルを登録できる |
-| agy | `agy -p "{プロンプト}" --dangerously-skip-permissions` | Google Antigravity CLI。実装委譲時は自動権限スキップで実行 |
-| agy-pro | `agy -p "{プロンプト}" --dangerously-skip-permissions --model "gemini-3.5-pro"` | Antigravity CLI 経由でモデルを明示指定する例 |
+| agy | `agy -p "{プロンプト}" --dangerously-skip-permissions --add-dir "$PWD" --model gemini-3.7-flash-medium --print-timeout 30m --output-format json` | Google Antigravity CLI。**`--add-dir` は必須**（無いと cwd がワークスペースにならず、実装が agy の scratch へ消える）。`--model` を省くと利用者のグローバル設定に依存する |
+| agy-high | `agy -p "{プロンプト}" --dangerously-skip-permissions --add-dir "$PWD" --model gemini-3.7-flash-high --print-timeout 30m --output-format json` | 一段上の推論が要るとき。**pro は 3.1 世代で格上げにならない**ため flash の effort を上げる |
 | grok | `grok -p "{プロンプト}"` | xAI Grok CLI（grok-4.5 等）。インストール済みの場合のみ |
 | gemini | `gemini "{プロンプト}"` | Google Gemini CLI |
 
-**サンドボックスの注意**: codex CLI の既定サンドボックスは読み取り専用。**ファイル書き込みを伴う委譲（分析成果物の保存・実装）では `-s workspace-write --full-auto` を追加する**こと（例: `codex exec -s workspace-write --full-auto "{プロンプト}"`）。agy CLI ではファイル書き込み時に `--dangerously-skip-permissions` を付与する（**{{COMMANDER_NAME}}と同じ作業ツリーで実行すること。** 別 worktree で走らせると、その実装は commit されず行き場を失う）。レビュー・セカンドオピニオンのように標準出力を呼び出し元が受け取って保存する用途では不要。
+**サンドボックスの注意**: codex CLI の既定サンドボックスは読み取り専用。**ファイル書き込みを伴う委譲（分析成果物の保存・実装）では `-s workspace-write --full-auto` を追加する**こと（例: `codex exec -s workspace-write --full-auto "{プロンプト}"`）。agy CLI ではファイル書き込み時に **`--dangerously-skip-permissions` と `--add-dir "$PWD"` の両方**を付与する（**{{COMMANDER_NAME}}と同じ作業ツリーで実行すること。** 別 worktree で走らせると、その実装は commit されず行き場を失う）。レビュー・セカンドオピニオンのように標準出力を呼び出し元が受け取って保存する用途では不要。
+
+**agy の三つの落とし穴**（いずれも「失敗が黙って握り潰される」型なので、必ず守ること）:
+1. **`--add-dir` が無いと cwd に書けない。** agy は cwd をワークスペースとみなさず、`~/.gemini/antigravity-cli/scratch/` へ書こうとして失敗する。信頼済みワークスペースに登録済みでも同じ。
+2. **`status` は成否の判定に使えない。** 実装が完全に成功していても `status: ERROR` を返すことがある（最初のツール呼び出しが弾かれると、その後成功しても残る）。終了コードも 0 のままなので当てにならない。**成否は `git status` の差分とビルドで判定する。**
+3. **`usage.total_tokens` が 0 なら一度も動いていない。** モデルID誤りや権限拒否は API 到達前に落ちるため消費がゼロになる。これは設定不備の署名であり、フォールバックで隠さず**報告して止める**。
 
 利用可否は CLI 本体の存在（例: `command -v codex`）で確認し、不可の場合は Claude にフォールバックして報告する。
 

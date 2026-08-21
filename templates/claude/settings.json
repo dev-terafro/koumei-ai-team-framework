@@ -1,4 +1,10 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(agy -p:*)",
+      "Bash(codex exec:*)"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {

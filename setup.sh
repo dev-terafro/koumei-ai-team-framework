@@ -1884,16 +1884,30 @@ do_setup() {
           cp "$settings_tmpl" ".claude/settings.json"
           log_info "作成: .claude/settings.json"
         elif command -v jq &>/dev/null; then
+          # hooks は既存があれば触らない（手動マージを促す）。
+          # permissions.allow は既存の有無に依らず必ず足す —— 外部CLI委譲（agy / codex）は
+          # 許可が無いとヘッドレス実行で承認要求に阻まれ、黙って Claude にフォールバックするため。
+          local keep_hooks=false
           if jq -e '.hooks' .claude/settings.json >/dev/null 2>&1; then
+            keep_hooks=true
             log_warn ".claude/settings.json に既存の hooks 設定があります。${settings_tmpl} を参考に手動でマージしてください。"
-          else
-            local merged
-            if merged=$(jq -s '.[0] + {hooks: .[1].hooks}' .claude/settings.json "$settings_tmpl" 2>/dev/null) && [[ -n "$merged" ]]; then
-              printf '%s\n' "$merged" > .claude/settings.json
-              log_info "マージ: .claude/settings.json に hooks 設定を追加"
+          fi
+          local merged
+          if merged=$(jq -s --argjson keep "$keep_hooks" '
+                .[0] as $cur | .[1] as $tmpl |
+                $cur
+                + (if $keep then {} else {hooks: $tmpl.hooks} end)
+                + {permissions: (($cur.permissions // {})
+                    + {allow: ((($cur.permissions.allow) // []) + (($tmpl.permissions.allow) // []) | unique)})}
+              ' .claude/settings.json "$settings_tmpl" 2>/dev/null) && [[ -n "$merged" ]]; then
+            printf '%s\n' "$merged" > .claude/settings.json
+            if $keep_hooks; then
+              log_info "マージ: .claude/settings.json に permissions.allow を追加"
             else
-              log_warn ".claude/settings.json の自動マージに失敗しました。${settings_tmpl} を参考に手動で追加してください。"
+              log_info "マージ: .claude/settings.json に hooks 設定と permissions.allow を追加"
             fi
+          else
+            log_warn ".claude/settings.json の自動マージに失敗しました。${settings_tmpl} を参考に手動で追加してください。"
           fi
         else
           log_warn "jq が無いため .claude/settings.json をマージできません。${settings_tmpl} を参考に手動で追加してください。"
