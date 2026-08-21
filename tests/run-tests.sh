@@ -524,7 +524,7 @@ echo "[T15] STAGING確認チェックリスト（様式と移植タスクの上�
 
 for mg in on off; do
   if [[ "$mg" == on ]]; then
-    make_project "$WORK_DIR/t15-$mg" 's/^  enabled: false/  enabled: true/'
+    make_project "$WORK_DIR/t15-$mg" '/^migration:/,/^$/s/^  enabled: false/  enabled: true/'
   else
     make_project "$WORK_DIR/t15-$mg"
   fi
@@ -549,6 +549,67 @@ for mg in on off; do
     assert_not "mg=$mg: 非移植PJに移植専用の掟が漏れない" grep -q "移行元との突き合わせ" "$P"
   fi
 done
+
+# ------------------------------------------------------------
+echo ""
+echo "[T16] 無人運転（行列・待避・戦況表・課題管理連携）"
+
+U=.claude/skills/koumei-start/docs/unattended.md
+
+# --- 連携なし（既定）。設定を書いていない既存プロジェクトが無傷であること ---
+make_project "$WORK_DIR/t16-off"
+bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 (ticket=off)"
+assert "off: 無人運転の手順書が配布される" test -f "$U"
+assert "off: 問うてはならぬ大原則がある" grep -q "問うてはならない。待避せよ" "$U"
+assert "off: 連携なしでもタスク定義から行列を引く" grep -q "task-\*.md" "$U"
+assert_not "off: 課題管理連携の記述が漏れない" grep -q "課題管理システムに問い合わせ" "$U"
+assert_not "off: 未置換の占位子が残らない" grep -q "{{" "$U"
+assert "off: --unattended を最優先で判定させる" grep -q "この判定を最優先する" .claude/skills/koumei-start/SKILL.md
+
+# --- 連携あり ---
+make_project "$WORK_DIR/t16-on" \
+  '/^ticket:/,/^$/s/^  enabled: false/  enabled: true/' \
+  's/^  status_designing: ""/  status_designing: "AI-PLANREVIEW"/' \
+  's/^  status_implementing: ""/  status_implementing: "AI-PROGRESS"/' \
+  's/^  status_review_ready: ""/  status_review_ready: "AI-PR"/' \
+  's/^  status_parked: ""/  status_parked: "ペンディング"/'
+# queue は引用符を含むためブロックスカラーで置く（プレーンだと yq 無し環境で引用符が剥がれる）
+perl -i -pe 's{^  queue: ""$}{  queue: |\n    status = "AI-READY" AND assignee = currentUser()}' koumei.config.yaml
+bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 (ticket=on)"
+assert "on: 行列の条件が展開される" grep -q "assignee = currentUser()" "$U"
+assert "on: JQLの引用符が剥がれない" grep -qF 'status = "AI-READY"' "$U"
+assert "on: 設計中の状態名が展開される" grep -q "AI-PLANREVIEW" "$U"
+assert "on: 実装中の状態名が展開される" grep -q "AI-PROGRESS" "$U"
+assert "on: PR待ちの状態名が展開される" grep -q "AI-PR" "$U"
+assert "on: 待避先の状態名が展開される" grep -q "ペンディング" "$U"
+assert "on: 行列を勝手に広げるなと戒める" grep -q "その場で広げてはならない" "$U"
+assert "on: 完了コメントにチェックリスト全文を載せさせる" grep -q "STAGING確認チェックリストの全文" "$U"
+assert_not "on: 未置換の占位子が残らない" grep -q "{{" "$U"
+
+# --- 待避と戦況表 ---
+assert "待避で「何が決まれば進むか」を書かせる" grep -q "何が決まれば進めるか" "$U"
+assert "待避前に commit + push させる" grep -q "そこまでの成果を commit + push" "$U"
+assert "三件続けて待避したら運転を終える" grep -q "三件続けて待避した" "$U"
+assert "戦況表の出力先が定まっている" grep -q "night-{YYYY-MM-DD}.md" "$U"
+assert "戦況表はコミットさせない" grep -q "コミットしない" "$U"
+assert "待避を先に、完遂を後に書かせる" grep -q "待避を先に、完遂を後に書く" "$U"
+assert "一件も処理できなかった夜も表を書かせる" grep -q "一件も処理できなかった夜も" "$U"
+
+# --- 安全弁: 絞り込みを欠いた連携は無効化される（他の担当者のチケットを拾わせない） ---
+make_project "$WORK_DIR/t16-noqueue" '/^ticket:/,/^$/s/^  enabled: false/  enabled: true/'
+bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 (ticket=絞り込みなし)"
+assert "絞り込みが無ければ警告する" grep -q "ticket.queue が空" setup.log
+assert_not "絞り込みが無ければ連携記述を出さない" grep -q "課題管理システムに問い合わせ" "$U"
+
+# --- 後方互換: ticket セクションを持たない既存プロジェクトを壊さない ---
+# 新設キーを CONFIG_REQUIRED_KEYS に加えると --update が drift 判定で止まるため、その回帰を張る
+make_project "$WORK_DIR/t16-legacy" '/^ticket:/,/^$/d'
+assert_not "検証用configに ticket 節が無い" grep -q "^ticket:" koumei.config.yaml
+bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 (ticket 節なし)"
+assert "節が無くても生成が通る" test -f "$U"
+assert_not "節が無ければ連携記述を出さない" grep -q "課題管理システムに問い合わせ" "$U"
+bash "$SETUP" --update > update.log 2>&1 || ng "--update 実行 (ticket 節なし)"
+assert_not "節が無くても --update が reconfig を要求しない" grep -q "reconfig" update.log
 
 # ------------------------------------------------------------
 echo ""

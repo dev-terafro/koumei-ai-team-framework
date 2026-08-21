@@ -47,6 +47,9 @@ allowed-tools: Read Write Glob Grep Bash Edit Agent AskUserQuestion
 
 `$ARGUMENTS` を確認し、実行モードを決定する:
 
+0. **`--unattended` が含まれる場合** → 無人運転（[docs/unattended.md](docs/unattended.md) の手順で実行）。
+   **この判定を最優先する。**人がいない前提の運転であり、以下のいずれの分岐にも入ってはならない
+   （選択肢を提示すれば、そこで朝まで止まる）
 1. **`--manual` が含まれる場合** → 順次モード（Phase 0 のみ実行し案内して終了）
 {{#IF_CLI claude}}
 2. **`--multi` が含まれる場合** → マルチタスクモード（[docs/multi-task.md](docs/multi-task.md) の手順で実行）
