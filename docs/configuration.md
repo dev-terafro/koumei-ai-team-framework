@@ -63,6 +63,29 @@ tech-lead は**フェーズ分割**（設計と実装で別モデル）。配置
 
 指定可能な値: `haiku` / `sonnet` / `opus` / `fable`（またはフルモデルID）、および TEAM.md「外部CLIモデル定義」に登録した外部モデル名（`agy` / `agy-high` / `codex` / `grok` 等。この場合 Agent tool ではなく Bash 経由で起動される）。
 
+### cli_models（外部CLIモデル定義・任意）
+
+`models.<ロール>` に書ける外部CLI名を、config から**増やせる／上書きできる**。
+
+```yaml
+cli_models:
+  agy-sonnet: |
+    agy -p "{プロンプト}" --dangerously-skip-permissions --add-dir "$PWD" --model claude-sonnet-4-6 --print-timeout 30m --output-format json
+```
+
+- 既定（`agy` / `agy-high` / `codex` / `gpt-5.6-sol` / `grok` / `gemini`）は書かなくても使える。
+  **同名を書けば上書き**する
+- 定義した名前は TEAM.md「外部CLIモデル定義」表に展開され、そのまま `models.<ロール>` に指定できる
+- **コマンドは必ず `|` ブロック形式で書く。** 引用符や `$` を含むため、
+  プレーンスカラーだと yq 無し環境で壊れる
+- **`{プロンプト}` を必ず含める。** 欠けていれば setup.sh が**報告して止める** ——
+  委譲先へ指示が渡らないまま「成功」して返るため、黙って進めてはならない
+- 定義したコマンドは `.claude/settings.json` の `permissions.allow` に**自動で配線**される
+  （許可が無いとヘッドレス実行で承認要求に阻まれ、一度も実行されないままフォールバックする）
+
+**TEAM.md の表を直接編集しても意味がない。** あれは生成物であり、
+quality-gate hook がブロックし、`setup.sh --update` で消える。増やすならここに書く。
+
 ### 外部CLI委譲を指定したときの要件
 
 外部モデル名を指定すると Bash 経由の起動になり、Agent tool とは前提が変わる。

@@ -64,6 +64,22 @@ models:
   devils-advocate: "fable"
   scribe: "sonnet"
 
+# === 外部CLIモデル定義（任意）===
+# ここに書いた名前を、上の models.<ロール> にそのまま指定できる。
+# 既定（agy / agy-high / codex / gpt-5.6-sol / grok / gemini）は書かなくても使える。
+# 同名を書けば既定を上書きする。
+#
+# ※ コマンドは引用符や $ を含むため、必ず | ブロック形式で書くこと
+#   （プレーンスカラーは yq 無し環境で引用符が剥がれる）
+# ※ {プロンプト} を必ず含めること。無いと委譲先へ指示が渡らないまま「成功」して返るため、
+#   setup.sh は誤りとして報告して止める
+# ※ 書いた定義は .claude/settings.json の permissions.allow にも自動で配線される
+#   （許可が無いとヘッドレス実行で承認要求に阻まれ、一度も実行されないままフォールバックする）
+#
+# cli_models:
+#   agy-sonnet: |
+#     agy -p "{プロンプト}" --dangerously-skip-permissions --add-dir "$PWD" --model claude-sonnet-4-6 --print-timeout 30m --output-format json
+
 # === レビュー設定 ===
 review:
   mode: "default"                    # default（codex→claude） | economy（codex→lmstudio→claude） | claude-only

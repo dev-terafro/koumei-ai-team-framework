@@ -1152,7 +1152,7 @@ assert "README: オプションロール表に既定モデル列がある" \
   bash -c 'awk "/^### オプションロール/,/^### モデルはロール別に変えられる/" '"$RM5"' | grep -q "既定モデル(claude)"'
 assert "README: 変えられる節がある" grep -q "^### モデルはロール別に変えられる" "$RM5"
 assert "README: 固定値ではないと明記" grep -q "固定値ではありません" "$RM5"
-assert "README: 指定できる値が載る" grep -q "および TEAM.md「外部CLIモデル定義」に登録した名前" "$RM5"
+assert "README: 指定できる値が載る" grep -q "および外部CLIモデル名（既定は" "$RM5"
 assert "README: 変更経路が載る" grep -q "koumei.config.yaml\` を編集して \`setup.sh --update" "$RM5"
 assert "README: TEAM.md 直接編集は消えると載る" grep -q "hook がブロックし \`--update\` で消えます" "$RM5"
 assert "README: まず既定で回せと順序を示す" grep -q "まず既定のまま回して" "$RM5"
@@ -1393,6 +1393,79 @@ assert "README: 移す作法の在り処が載る" grep -q "docs/ticket.md" "$RM
 assert "README: 三段が載る" grep -q "移した後に読み直して確かめる" "$RM7"
 assert "README: 名前ベースが基準だと載る" grep -q "名前でそのまま動かせる環境（ラベル等）を基準に据え" "$RM7"
 assert "README: 候補に無ければ止まると載る" grep -q "設定の誤りとして報告して止める" "$RM7"
+
+# ------------------------------------------------------------
+echo ""
+echo "[T28] 外部CLIモデルを config から定義できるか（issue #41）"
+
+CM_DEF='s|^# cli_models:|cli_models:\n  agy-sonnet: \|\n    agy -p "{プロンプト}" --dangerously-skip-permissions --add-dir "$PWD" --model claude-sonnet-4-6 --print-timeout 30m --output-format json\n  mytool: \|\n    mytool run --prompt "{プロンプト}" --dir "$PWD"|'
+
+make_project "$WORK_DIR/t28" "$CM_DEF" \
+  's/^  # - analyst.*/  - analyst/' \
+  's|^  analyst: "sonnet"|  analyst: "agy-sonnet"|'
+bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 (T28)"
+TMD=.agents/TEAM.md
+
+assert "定義を読み込んだと報告する" grep -q "外部CLIモデル定義を読み込みました" setup.log
+assert "定義した名前が表に出る（agy-sonnet）" grep -q "^| agy-sonnet |" "$TMD"
+assert "定義した名前が表に出る（mytool）" grep -q "^| mytool |" "$TMD"
+assert "既定の6つは残る（agy）" grep -q "^| agy |" "$TMD"
+assert "既定の6つは残る（codex）" grep -q "^| codex |" "$TMD"
+assert "出典が判る（config 由来と明記）" grep -q "cli_models で定義" "$TMD"
+assert "モデル列に定義名を指定できる" grep -qE '\| \*\*システム分析担当\*\* \|.*agy-sonnet \|' "$TMD"
+
+# --- 置換で値が壊れないこと（renderer が $ と @ を潰していた） ---
+assert "コマンドの \$PWD が壊れない" grep -q -- '--add-dir "\$PWD" --model claude-sonnet-4-6' "$TMD"
+assert_not "コマンドに \\\$ が混入しない" grep -q -- '\\\$PWD' "$TMD"
+
+# --- permissions.allow への配線（無ければ一度も実行されない） ---
+assert "配線したと報告する" grep -q "cli_models の許可を" setup.log
+assert "新しい道具の許可が入る" jq -e '.permissions.allow | index("Bash(mytool run:*)")' .claude/settings.json
+assert "既定の許可が消えない" jq -e '.permissions.allow | index("Bash(codex exec:*)")' .claude/settings.json
+assert "重複しない" \
+  bash -c 'test "$(jq -r ".permissions.allow[]" .claude/settings.json | sort | uniq -d | wc -l)" -eq 0'
+
+# --- 生成物は編集できないと明記されているか（旧: 「編集してください」という不成立の指示） ---
+assert "表が生成物だと明記" grep -q "この表は生成物であり、直接編集しても" "$TMD"
+assert "config へ導線がある" grep -q "cli_models\` に書いて" "$TMD"
+assert_not "旧: 編集してください が残らない" grep -q "使用する CLI の仕様に合わせて編集してください" "$TMD"
+
+# --- {プロンプト} を欠いた定義は止める（渡らないまま「成功」して返るため） ---
+make_project "$WORK_DIR/t28-noprompt" \
+  's|^# cli_models:|cli_models:\n  broken: \|\n    mytool run --dir "$PWD"|'
+if bash "$SETUP" > setup.log 2>&1; then ng "{プロンプト} 欠落: 止まる"; else ok "{プロンプト} 欠落: 止まる"; fi
+assert "{プロンプト} 欠落: 理由を告げる" grep -q "{プロンプト} がありません" setup.log
+assert_not "{プロンプト} 欠落: 生成物を作らない" test -f .agents/TEAM.md
+
+# --- 空のコマンドも止める ---
+make_project "$WORK_DIR/t28-empty" 's|^# cli_models:|cli_models:\n  hollow: ""|'
+if bash "$SETUP" > setup.log 2>&1; then ng "空コマンド: 止まる"; else ok "空コマンド: 止まる"; fi
+assert "空コマンド: 理由を告げる" grep -q "コマンドが書かれていません" setup.log
+
+# --- 節が無い既存プロジェクトは無傷 ---
+make_project "$WORK_DIR/t28-none"
+bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 (T28 none)"
+assert "節なし: 既定の表はそのまま出る" grep -q "^| agy-high |" .agents/TEAM.md
+assert_not "節なし: 余計な行が出ない" grep -q "cli_models で定義" .agents/TEAM.md
+assert "節なし: --update が通る" bash -c 'bash "'"$SETUP"'" --update >/dev/null 2>&1'
+
+# --- 置換の回帰: @ を含む値（GitHub の行列条件）が壊れないこと ---
+make_project "$WORK_DIR/t28-at" \
+  '/^ticket:/,/^$/s/^  enabled: false/  enabled: true/' \
+  's|^  queue: ""|  queue: \|\n    is:issue is:open label:"x" assignee:@me|'
+bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 (T28 at)"
+assert "@ を含む値が壊れない" grep -q "assignee:@me" .claude/skills/koumei-start/docs/unattended.md
+assert_not "@ の前に \\ が混入しない" grep -q 'assignee:\\@me' .claude/skills/koumei-start/docs/unattended.md
+
+# --- 利用者向け文書の追随 ---
+RM8="${REPO_DIR}/README.md"; CF8="${REPO_DIR}/docs/configuration.md"
+assert "README: cli_models で増やせると載る" grep -q "外部CLIモデルは config から増やせます" "$RM8"
+assert "configuration: cli_models の節がある" grep -q "^### cli_models（外部CLIモデル定義・任意）" "$CF8"
+assert "configuration: 同名は上書きと載る" grep -q "同名を書けば上書き" "$CF8"
+assert "configuration: {プロンプト} 必須と載る" grep -q "報告して止める" "$CF8"
+assert "configuration: allow へ自動配線と載る" grep -q "自動で配線" "$CF8"
+assert "configuration: 表の直接編集は無意味と載る" grep -q "表を直接編集しても意味がない" "$CF8"
+assert "config 例: cli_models の雛形がある" grep -q "^#   agy-sonnet: |" "${REPO_DIR}/koumei.config.example.yaml"
 
 # ------------------------------------------------------------
 echo ""

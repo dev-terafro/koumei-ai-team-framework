@@ -1086,6 +1086,23 @@ yaml_get_multiline() {
   fi
 }
 
+# 親キー配下の子キー名を列挙する（キー名が未知のマップを読むため）
+# 例: cli_models 配下に利用者が任意の名前で定義した外部CLIモデル
+yaml_child_keys() {
+  local parent="$1"
+  if has_yq; then
+    yq -r ".${parent} // {} | keys | .[]" "$CONFIG_FILE" 2>/dev/null
+  else
+    awk -v parent="$parent" '
+      $0 ~ "^"parent":" { inp = 1; next }
+      inp && /^[a-zA-Z_]/ { inp = 0 }
+      inp && match($0, /^[[:space:]]+[A-Za-z0-9_.-]+:/) {
+        k = substr($0, RSTART, RLENGTH - 1); gsub(/^[[:space:]]+/, "", k); print k
+      }
+    ' "$CONFIG_FILE"
+  fi
+}
+
 # キーが存在するかどうかだけを判定（値の中身は見ない。空文字の正規設定と「未設定」を区別するため）
 # ネストされたキーは "." で区切る（例: "tech_stack.check_command"）
 yaml_has_key() {
@@ -1239,6 +1256,39 @@ load_config() {
   # 課題管理システム連携（任意・無人運転で消費される）
   # 未設定のプロジェクトを壊さないため CONFIG_REQUIRED_KEYS には加えない。
   # 欠落＝無効として扱い、連携の記述は一切展開しない
+  # --- 外部CLIモデル定義（利用者が自分の環境の道具を宣言する口）---
+  # 既定の表はテンプレートが持ち、ここで足した分を追記する。同名なら利用者側が勝つ。
+  # 定義表をテンプレート直書きにしていた頃は、名前を増やすのに枠組み本体を書き換える
+  # しかなかった（TEAM.md は生成物であり、hook が直接編集を止める）
+  CLI_MODELS_EXTRA=""
+  CLI_MODELS_ALLOW=""
+  CLI_MODELS_NAMES=""
+  local _cm _cmd _head
+  while IFS= read -r _cm; do
+    [[ -z "$_cm" ]] && continue
+    _cmd=$(yaml_get_multiline "cli_models" "$_cm")
+    _cmd="${_cmd%$'\n'}"
+    if [[ -z "$_cmd" ]]; then
+      log_error "cli_models.${_cm} にコマンドが書かれていません。"
+      exit 1
+    fi
+    # プロンプトの差し込み口を欠いた定義は、委譲先に何も渡さないまま「成功」して返る。
+    # 黙って進めれば、委譲したのに何もしていない状態が気づかれない（#25 と同じ型）
+    if [[ "$_cmd" != *"{プロンプト}"* ]]; then
+      log_error "cli_models.${_cm} のコマンドに {プロンプト} がありません。委譲先へ指示が渡らないため止めます。"
+      exit 1
+    fi
+    CLI_MODELS_NAMES="${CLI_MODELS_NAMES}${_cm} "
+    CLI_MODELS_EXTRA="${CLI_MODELS_EXTRA}| ${_cm} | \`${_cmd}\` | koumei.config.yaml の cli_models で定義 |
+"
+    # 許可は先頭2語で足りる（Bash(agy -p:*) の形）。無ければヘッドレスで承認要求に阻まれ、
+    # 一度も実行されないまま Claude へフォールバックする
+    _head=$(printf '%s' "$_cmd" | awk '{print $1" "$2}')
+    CLI_MODELS_ALLOW="${CLI_MODELS_ALLOW}Bash(${_head}:*)
+"
+  done < <(yaml_child_keys "cli_models")
+  [[ -n "$CLI_MODELS_NAMES" ]] && log_info "外部CLIモデル定義を読み込みました: ${CLI_MODELS_NAMES}"
+
   TICKET_QUEUE_MISSING="false"
   TICKET_ENABLED=$(yaml_get "ticket.enabled")
   # queue は引用符・# を含むため multiline 経由で取る（プレーンスカラーだと引用符が剥がれる）
@@ -1360,6 +1410,7 @@ load_config() {
   export KOUMEI_VAR_GIT_BRANCH_PATTERN="$GIT_BRANCH_PATTERN"
   export KOUMEI_VAR_GIT_MAIN_BRANCH="$GIT_MAIN_BRANCH"
   export KOUMEI_VAR_GIT_DEVELOP_BRANCH="$GIT_DEVELOP_BRANCH"
+  export KOUMEI_VAR_CLI_MODELS_EXTRA="$CLI_MODELS_EXTRA"
   export KOUMEI_VAR_TICKET_QUEUE="$TICKET_QUEUE"
   export KOUMEI_VAR_TICKET_STATUS_DESIGNING="$TICKET_STATUS_DESIGNING"
   export KOUMEI_VAR_TICKET_STATUS_IMPLEMENTING="$TICKET_STATUS_IMPLEMENTING"
@@ -1543,10 +1594,9 @@ process_template() {
     for my $key (sort { length($b) <=> length($a) } keys %env_vars) {
       my $val = $env_vars{$key};
       my $qkey = quotemeta($key);
-      # 置換値をリテラルとして扱う（\Q...\E相当）
-      $val =~ s/\\/\\\\/g;
-      $val =~ s/\$/\\\$/g;
-      $val =~ s/\@/\\\@/g;
+      # 置換値は s/// の右辺で再解釈されないため、エスケープしてはならない。
+      # かつて \$ / \@ / \\ を足していたが、その分がそのまま出力に残り、
+      # $PWD → \$PWD、assignee:@me → assignee:\@me と値を壊していた
       $content =~ s/\{\{$qkey\}\}/$val/g;
     }
 
@@ -1562,10 +1612,7 @@ process_template() {
       close $vfh;
       $val = "" unless defined $val;
       my $qname = quotemeta($var_name);
-      # 置換値をリテラルとして扱う
-      $val =~ s/\\/\\\\/g;
-      $val =~ s/\$/\\\$/g;
-      $val =~ s/\@/\\\@/g;
+      # 同上。s/// の右辺は再解釈されない
       $content =~ s/\{\{$qname\}\}/$val/g;
     }
 
@@ -2110,6 +2157,29 @@ do_setup() {
           fi
         else
           log_warn "jq が無いため .claude/settings.json をマージできません。${settings_tmpl} を参考に手動で追加してください。"
+        fi
+
+        # cli_models で宣言した道具の許可を配線する。
+        # 許可が無ければヘッドレス実行で承認要求に阻まれ、一度も実行されないまま
+        # Claude へフォールバックする（#25 で潰した型）。宣言したのに配線しなければ、
+        # 「定義したのに使われない」という同じ穴を新設することになる
+        if ! $DRY_RUN && [[ -n "$CLI_MODELS_ALLOW" ]] && [[ -f ".claude/settings.json" ]]; then
+          if command -v jq &>/dev/null; then
+            local allow_json merged2
+            allow_json=$(printf '%s' "$CLI_MODELS_ALLOW" | grep -v '^$' | jq -R . | jq -s .)
+            if merged2=$(jq --argjson add "$allow_json" '
+                  .permissions = ((.permissions // {})
+                    + {allow: (((.permissions.allow) // []) + $add | unique)})
+                ' .claude/settings.json 2>/dev/null) && [[ -n "$merged2" ]]; then
+              printf '%s\n' "$merged2" > .claude/settings.json
+              log_info "配線: cli_models の許可を .claude/settings.json に追加"
+            else
+              log_warn "cli_models の許可を settings.json へ追加できませんでした。手動で追加してください。"
+            fi
+          else
+            log_warn "jq が無いため cli_models の許可を配線できません。次を .claude/settings.json の permissions.allow に手動で追加してください:"
+            printf '%s' "$CLI_MODELS_ALLOW" | grep -v '^$' | while IFS= read -r _a; do log_warn "  ${_a}"; done
+          fi
         fi
       fi
     elif [[ "$TARGET_CLI" == "antigravity" ]]; then

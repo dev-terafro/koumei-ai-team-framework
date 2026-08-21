@@ -89,7 +89,11 @@
 
 #### 外部CLIモデル定義
 
-モデル列・レビューモデル・セカンドオピニオンで外部CLIモデルを使う場合の呼び出し方法。使用する CLI の仕様に合わせて編集してください。
+モデル列・レビューモデル・セカンドオピニオンで外部CLIモデルを使う場合の呼び出し方法。
+
+**この表は生成物であり、直接編集しても `setup.sh --update` で消える。**
+名前を足す・既定を上書きするには `koumei.config.yaml` の `cli_models` に書いて `--update` する
+（例は `koumei.config.example.yaml`）。定義した名前はそのまま「モデル」列に指定できる。
 
 | モデル名 | 呼び出し方法 | 備考 |
 |---------|------------|------|
@@ -99,7 +103,7 @@
 | agy-high | `agy -p "{プロンプト}" --dangerously-skip-permissions --add-dir "$PWD" --model gemini-3.7-flash-high --print-timeout 30m --output-format json` | 一段上の推論が要るとき。**pro は 3.1 世代で格上げにならない**ため flash の effort を上げる |
 | grok | `grok -p "{プロンプト}"` | xAI Grok CLI（grok-4.5 等）。インストール済みの場合のみ |
 | gemini | `gemini "{プロンプト}"` | Google Gemini CLI |
-
+{{CLI_MODELS_EXTRA}}
 **サンドボックスの注意**: codex CLI の既定サンドボックスは読み取り専用。**ファイル書き込みを伴う委譲（分析成果物の保存・実装）では `-s workspace-write --full-auto` を追加する**こと（例: `codex exec -s workspace-write --full-auto "{プロンプト}"`）。agy CLI ではファイル書き込み時に **`--dangerously-skip-permissions` と `--add-dir "$PWD"` の両方**を付与する（**{{COMMANDER_NAME}}と同じ作業ツリーで実行すること。** 別 worktree で走らせると、その実装は commit されず行き場を失う）。レビュー・セカンドオピニオンのように標準出力を呼び出し元が受け取って保存する用途では不要。
 
 **agy の三つの落とし穴**（いずれも「失敗が黙って握り潰される」型なので、必ず守ること）:
