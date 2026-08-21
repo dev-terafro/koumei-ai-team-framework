@@ -2039,6 +2039,12 @@ do_setup() {
         [[ -f "$doc_tmpl" ]] || continue
         local doc_name
         doc_name=$(basename "$doc_tmpl" .tmpl)
+        # ticket.md は連携を有効にした環境にのみ展開する（無効なら記述を一切出さない）
+        if [[ "$doc_name" == "ticket.md" && "$TICKET_ENABLED" != "true" ]]; then
+          # 無効化・設定変更の前に生成された残骸を消す（残れば「使える」と誤解させる）
+          [[ -f "${SKILLS_DIR}/${target_name}/docs/${doc_name}" ]] && rm -f "${SKILLS_DIR}/${target_name}/docs/${doc_name}"
+          continue
+        fi
         # multi-task.md はネストsubagent/invoke_subagent前提（claude / antigravity ターゲットのみ展開）
         if [[ "$doc_name" == "multi-task.md" && "$TARGET_CLI" != "claude" && "$TARGET_CLI" != "antigravity" ]]; then
           # 旧バージョン・target_cli変更前に生成された残骸があれば削除（非対応CLIの陳腐化ファイル）

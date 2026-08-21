@@ -798,6 +798,8 @@ Phase 2 と同様に devils-advocate サブエージェントを起動する。
 - **全項目 OK** → チケットを **{{TICKET_STATUS_STAGING_OK}}** へ
 - **NG あり** → **{{TICKET_STATUS_STAGING_NG}}** へ移し、**NGの番号と実際に起きたこと**をコメントに記す
 - **判断に迷う** → **{{TICKET_STATUS_PARKED}}** へ
+
+「移す」の作法は [ticket.md](ticket.md) に定める（移した後に読み直して確かめること）。
 {{/IF_TICKET_STAGING}}
 {{#IF_NO_TICKET_STAGING}}
 - **全項目 OK** → 確認済みとして次工程へ進める

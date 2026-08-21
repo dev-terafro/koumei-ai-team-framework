@@ -101,6 +101,10 @@
 | 5 | Phase 7 を実行する（公式ドキュメント反映・STAGING確認チェックリスト・PR） |
 | 6 | チケットを **{{TICKET_STATUS_REVIEW_READY}}** へ移し、下記をコメントする |
 | 7 | 戦況表に一行記し、次の一枚へ |
+
+**「移す」の作法は [ticket.md](ticket.md) に定める。** 候補を問い、宣言した名前と突き合わせ、
+移した後に読み直して確かめる。**道具の戻り値を信じて「移した」と report してはならない。**
+遷移先が候補に無い場合は設定の誤りであり、握り潰さず報告する（ticket.md §3）。
 {{/IF_TICKET}}
 {{#IF_NO_TICKET}}
 | 1 | Phase 0〜7 を実行する（[phases.md](phases.md)。Git運用の掟に従い、フェーズごとに commit + push） |

@@ -1311,6 +1311,91 @@ assert "README: queue を取り込まない理由が載る" grep -q "絞り込�
 
 # ------------------------------------------------------------
 echo ""
+echo "[T27] 状態名からトランジションIDへの段差（issue #28）"
+
+T_ON='/^ticket:/,/^$/s/^  enabled: false/  enabled: true/'
+T_Q='s|^  queue: ""|  queue: \|\n    is:issue is:open label:"status:ai-ready" assignee:@me|'
+
+# --- 有効時: 作法が生成される ---
+# STAGING の三つを揃える。phases.md の遷移指示は三つ揃ったときだけ出る（#23）
+make_project "$WORK_DIR/t27-on" "$T_ON" "$T_Q" \
+  's|^  status_implementing: ""|  status_implementing: "status:ai-progress"|' \
+  's|^  status_parked: ""|  status_parked: "status:parked"|' \
+  's|^  status_staging_ok: ""|  status_staging_ok: "status:staging-ok"|' \
+  's|^  status_staging_ng: ""|  status_staging_ng: "status:staging-ng"|'
+bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 (T27 on)"
+TK=.claude/skills/koumei-start/docs/ticket.md
+assert "有効: ticket.md が生成される" test -f "$TK"
+assert "有効: 宣言した状態名が展開される" grep -q "status:ai-progress" "$TK"
+assert "有効: 接続手段は管轄外と明記" grep -q "接続手段（MCP・CLI・API）は枠組みの管轄外" "$TK"
+assert "有効: 特定システムを焼き付けるなと戒める" grep -q "特定の課題管理システムの手順を焼き付けてはならない" "$TK"
+
+# --- 三段の作法（三段目＝確かめが肝） ---
+assert "三段: 候補を問う" grep -q "候補を問う" "$TK"
+assert "三段: 名前と突き合わせる" grep -q "宣言した状態名と突き合わせる" "$TK"
+assert "三段: 移した後に読み直す" grep -q "移した後の状態を読み直して確かめる" "$TK"
+assert "三段: 三段目を省くなと明記" grep -q "三段目を省いてはならない" "$TK"
+assert "三段: 道具の戻り値を信じるなと明記" grep -q "道具の戻り値は当てにならない" "$TK"
+assert "三段: 委譲で踏んだ轍と同型だと繋ぐ" grep -q "agy の三つの落とし穴" "$TK"
+
+# --- 名前で動く環境を基準に据える（Jira 固有の都合を作法に混ぜない） ---
+assert "抽象度: 名前で動く環境を基準にする" grep -q "名前で動く環境を基準に考える" "$TK"
+assert "抽象度: ID解決は一段挟まるだけと位置づける" grep -q "もう一段挟まる」だけのこと" "$TK"
+assert "ID: 遷移のたびに引き直させる" grep -q "遷移のたびに引き直すこと" "$TK"
+assert "ID: 使い回しを禁じる" grep -q "使い回してはならない" "$TK"
+assert "単一状態が保証されない環境は除去と付与を対にする" grep -q "旧状態の除去と新状態の付与を必ず対で行う" "$TK"
+
+# --- 候補に無い＝設定の誤り（黙って続行しない） ---
+assert "候補に無い: 報告して止めると明記" grep -q "黙って握り潰さず、報告して止める" "$TK"
+assert "候補に無い: 設定の誤りだと言い切る" grep -q "設定の誤りであって、戦況の問題ではない" "$TK"
+assert "候補に無い: どのキーかを報告させる" grep -q "どのキーか" "$TK"
+assert "候補に無い: 実際の候補一覧を報告させる" grep -q "実際の候補一覧" "$TK"
+assert "候補に無い: フォールバックで隠すなと明記" grep -q "フォールバックで隠してはならない" "$TK"
+
+# --- 遷移できない（設定は正しい）: 成果は止めない、が黙らない ---
+assert "遷移不能: 成果物の作成を止めない" grep -q "成果物の作成を止めない" "$TK"
+assert "遷移不能: 黙って成功にしない" grep -q "黙って成功したことにしない" "$TK"
+assert "遷移不能: 本来の遷移先を残させる" grep -q "本来どこへ移すはずだったか" "$TK"
+assert "接続手段が無い環境の扱いが定まっている" grep -q "接続手段そのものが無い環境" "$TK"
+assert "接続手段が無いこと自体は誤りでないと明記" grep -q "無いこと自体は誤りではない" "$TK"
+
+# --- 無人運転での扱い ---
+assert "無人: 遷移失敗は待避の理由にしない" grep -q "遷移の失敗は待避の理由にしない" "$TK"
+assert "無人: 戦況表に必ず残す" grep -q "戦況表に必ず残す" "$TK"
+assert "無人: 設定の誤りは運転を終える" grep -q "着手中の一件を完遂してから運転を終える" "$TK"
+assert "無人: 続けても一件も遷移しないと理由を書く" grep -q "一件も遷移しないまま朝を迎える" "$TK"
+
+# --- 遷移を指示する側から参照が届いているか ---
+assert "unattended から作法へ導線がある" grep -q "ticket.md" .claude/skills/koumei-start/docs/unattended.md
+assert "unattended: 戻り値を信じて報告するなと釘を刺す" \
+  grep -q "道具の戻り値を信じて「移した」と report してはならない" .claude/skills/koumei-start/docs/unattended.md
+assert "phases（STAGING判定）から作法へ導線がある" \
+  grep -q "ticket.md" .claude/skills/koumei-start/docs/phases.md
+
+# --- 無効時: 一切の記述が出ない ---
+make_project "$WORK_DIR/t27-off"
+bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 (T27 off)"
+assert_not "無効: ticket.md は生成されない" test -f "$TK"
+assert_not "無効: unattended に参照が残らない" grep -q "ticket.md" .claude/skills/koumei-start/docs/unattended.md
+assert_not "無効: phases に参照が残らない" grep -q "ticket.md" .claude/skills/koumei-start/docs/phases.md
+
+# --- 有効→無効へ変えたとき、残骸が残らない（残れば「使える」と誤解させる） ---
+make_project "$WORK_DIR/t27-flip" "$T_ON" "$T_Q"
+bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 (T27 flip on)"
+assert "反転前: ticket.md がある" test -f "$TK"
+sed -i.bak 's/^  enabled: true/  enabled: false/' koumei.config.yaml && rm -f koumei.config.yaml.bak
+bash "$SETUP" --update > setup.log 2>&1 || ng "setup.sh --update 実行 (T27 flip off)"
+assert "反転後: ticket.md の残骸が消える" test ! -f "$TK"
+
+# --- 利用者向け文書の追随 ---
+RM7="${REPO_DIR}/README.md"
+assert "README: 移す作法の在り処が載る" grep -q "docs/ticket.md" "$RM7"
+assert "README: 三段が載る" grep -q "移した後に読み直して確かめる" "$RM7"
+assert "README: 名前ベースが基準だと載る" grep -q "名前でそのまま動かせる環境（ラベル等）を基準に据え" "$RM7"
+assert "README: 候補に無ければ止まると載る" grep -q "設定の誤りとして報告して止める" "$RM7"
+
+# ------------------------------------------------------------
+echo ""
 echo "=========================================="
 echo " 結果: PASS=$PASS FAIL=$FAIL"
 if [[ $FAIL -gt 0 ]]; then
