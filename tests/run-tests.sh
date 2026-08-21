@@ -819,14 +819,15 @@ assert "phases: agy委譲が run_in_background を指示する" grep -q "run_in_
 assert "phases: 前景禁止の理由（2分・10分）を書く" grep -q "既定2分" "$PH"
 assert_not "phases: 前景で実行させる古い記述が残らない" \
   grep -q 'Bash tool で `agy -p "{指示プロンプト}" --dangerously-skip-permissions` を実行' "$PH"
-assert "phases: Codex 委譲も背景実行にする" \
-  bash -c 'awk "/^### Codex委譲モード/,/^\*\*実行後/" '"$PH"' | grep -q run_in_background'
+# Phase 1 にも Codex委譲モードが立ったため、節名だけの awk では Phase 1 を先に拾う。
+# この検査は Phase 5 のものなので、フェーズで切ってから節を取る
+p5codex=$(awk '/^## Phase 5/,/^## Phase 6/' "$PH" | awk 'index($0,"### Codex委譲モード")==1{f=1;next} f&&/^### /{exit} f')
+assert "phases: Phase 5 の Codex 委譲も背景実行にする" grep -q "run_in_background" <<<"$p5codex"
 
 # --- ログの置き場（元の欠陥: フックの副作用でしか作られず、委譲ごと失敗した） ---
 assert "生成物に .agents/logs がある" test -d .agents/logs
 assert "phases: agy 委譲が logs を自前で作る" grep -q "mkdir -p .agents/logs" "$PH"
-assert "phases: codex 委譲も logs を自前で作る" \
-  bash -c 'awk "/^### Codex委譲モード/,/^\*\*実行後/" '"$PH"' | grep -q "mkdir -p .agents/logs"'
+assert "phases: Phase 5 の codex 委譲も logs を自前で作る" grep -q "mkdir -p .agents/logs" <<<"$p5codex"
 
 # --- 成否の判定（status を信じない） ---
 assert "phases: 一次判定が git の差分である" grep -q "git status --porcelain" "$PH"
@@ -848,7 +849,8 @@ CF2="${REPO_DIR}/docs/configuration.md"
 assert "README: 外部CLI委譲の要件が載る" grep -q "外部CLI委譲の要件" "$RM2"
 assert "README: --add-dir が載る" grep -q -- '--add-dir "\$PWD"' "$RM2"
 assert "README: 背景実行が載る" grep -q "run_in_background" "$RM2"
-assert "README: 差分で判定する旨が載る" grep -q "成否は差分で判定する" "$RM2"
+assert "README: 実物で判定する旨が載る" grep -q "成否は実物で判定する" "$RM2"
+assert "README: 実装は差分とビルドだと載る" grep -q "git status\` の差分とビルド" "$RM2"
 assert "README: 消費ゼロの署名が載る" grep -q "消費ゼロは設定不備の署名" "$RM2"
 assert "configuration: 委譲の要件表がある" grep -q "外部CLI委譲を指定したときの要件" "$CF2"
 assert "configuration: pro が格上げにならないと書く" grep -q "格上げにならない" "$CF2"
@@ -907,6 +909,129 @@ assert "README: 三つ揃いが条件だと明記" grep -q "三つが揃った�
 assert "README: queue 空なら無効と明記" grep -q "連携は無効" "$RM3"
 assert "README: 節なしなら既存プロジェクトが無傷と明記" grep -q "既存プロジェクトはそのまま動く" "$RM3"
 assert "README: 接続手段は管轄外と明記" grep -q "接続手段（MCP・CLI・API）は枠組みの管轄外" "$RM3"
+
+# ------------------------------------------------------------
+echo ""
+echo "[T22] 分析フェーズ（Phase 1）の外部CLI委譲（issue #30）"
+
+make_project "$WORK_DIR/t22" \
+  's/^  # - analyst.*/  - analyst/' \
+  's/^  # - ux-designer.*/  - ux-designer/'
+bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 (T22)"
+PH=.claude/skills/koumei-start/docs/phases.md
+TMD=.agents/TEAM.md
+AN=.claude/skills/koumei-analyze/SKILL.md
+
+p1=$(awk '/^## Phase 1: 分析実行/,/^## Phase 2: 分析レビュー/' "$PH")
+
+# --- Phase 5 と同じ三つの構えが Phase 1 にも立っているか ---
+for mode in 通常モード agy委譲モード Codex委譲モード; do
+  blk=$(awk -v m="### $mode" 'index($0,m)==1{f=1;next} f&&/^### /{exit} f' <<<"$p1")
+  if [[ -z "$blk" ]]; then
+    ng "Phase 1 に $mode の節がある"
+  else
+    ok "Phase 1 に $mode の節がある"
+  fi
+done
+
+# --- 委譲の可否は config が決める（PATH 常駐だけで委譲しない） ---
+assert "Phase 1: 委譲の可否は TEAM.md の指定で決まる" \
+  grep -q "委譲するか否かは TEAM.md の指定で決まる" <<<"$p1"
+assert "Phase 1: PATH 常駐だけでの委譲を禁じる" \
+  grep -q "PATH に在るというだけで委譲してはならない" <<<"$p1"
+assert "Phase 1: 委譲先を同じ作業ツリーで動かす" grep -q "同じ作業ツリーで動かす" <<<"$p1"
+
+# --- #25 の要件（前景で殺されて黙って Claude に落ちる事故の回帰） ---
+# フェーズで切るだけでは、片方の節が持つ記述にもう片方が救われる。モード単位で切る
+p1agy=$(awk 'index($0,"### agy委譲モード")==1{f=1;next} f&&/^### /{exit} f' <<<"$p1")
+p1codex=$(awk 'index($0,"### Codex委譲モード")==1{f=1;next} f&&/^### /{exit} f' <<<"$p1")
+assert "Phase 1 agy: 背景実行を指示する" grep -q "run_in_background" <<<"$p1agy"
+assert "Phase 1 agy: 前景禁止の理由（2分・10分）を書く" grep -q "既定2分" <<<"$p1agy"
+assert "Phase 1 codex: 背景実行を指示する" grep -q "run_in_background" <<<"$p1codex"
+assert "Phase 1 agy: logs を自前で作る" grep -q "mkdir -p .agents/logs" <<<"$p1agy"
+assert "Phase 1 codex: logs を自前で作る" grep -q "mkdir -p .agents/logs" <<<"$p1codex"
+assert "Phase 1 agy: --add-dir がある" grep -q -- '--add-dir "\$PWD"' <<<"$p1agy"
+assert "Phase 1 agy: モデル明示がある" grep -q -- "--model gemini-3.7-flash-medium" <<<"$p1agy"
+assert "Phase 1 agy: --print-timeout がある" grep -q -- "--print-timeout 30m" <<<"$p1agy"
+assert "Phase 1 agy: --output-format json がある" grep -q -- "--output-format json" <<<"$p1agy"
+assert "Phase 1: 待機中は作業ツリーに触れない" grep -q "作業ツリーに一切触れてはならない" <<<"$p1"
+
+# --- 合否は実物で判じる（元の欠陥: 成果物ファイルの存在だけで合格にしていた） ---
+assert "Phase 1: status を合否に使うなと明記" \
+  grep -q "status\` と終了コードを合否の判定に使ってはならない" <<<"$p1"
+assert "Phase 1: 一次判定が成果物の実在とサイズ" grep -q "成果物ファイルの実在と本文サイズ" <<<"$p1"
+assert "Phase 1: ファイル存在だけで合格としない" \
+  grep -q "ファイルが在るというだけで合格としてはならない" <<<"$p1"
+assert "Phase 1: 分析品質基準を合否の実物とする" grep -q "分析品質基準の照合" <<<"$p1"
+assert_not "旧: 存在確認だけで済ませる記述が残らない" \
+  grep -q "成果物ファイルの存在を確認する。ファイルが生成されていない場合はエラー" <<<"$p1"
+
+# 品質基準の四項目が名指しで検査対象になっているか（役割定義との対応が切れると空文になる）
+for k in 実データ確認 仮説と事実の区別 既存実装の事前チェック 影響範囲; do
+  assert "Phase 1: 照合項目に $k がある" grep -q "$k" <<<"$p1"
+done
+assert "役割定義に分析品質基準が実在する" grep -q "^## 分析品質基準" .agents/analyst/CLAUDE.md
+
+# --- 設定不備をフォールバックで隠さない ---
+assert "Phase 1: 消費ゼロで停止させる" grep -q "usage.total_tokens\` が 0" <<<"$p1"
+assert "Phase 1: 設定不備をフォールバックで隠すなと書く" \
+  grep -q "自動フォールバックで隠してはならない" <<<"$p1"
+
+# --- 付け替えが割に合うかを後から測れるようにする（issue #30 の検証項目） ---
+assert "Phase 1: 委譲先の消費を完了報告に残させる" grep -q "完了報告に1行記す" <<<"$p1"
+assert "Phase 1: 固定費があることを書く" grep -q "14〜16k" <<<"$p1"
+
+# --- git 禁止が Phase 1 の全経路に届くか（Phase 5 と同じ検査） ---
+assert "Phase 1 agy: プロンプトに git 禁止が届く" grep -q "git 操作を一切行わないこと" <<<"$p1agy"
+assert "Phase 1 codex: プロンプトに git 禁止が届く" \
+  grep -q "git 操作を一切行わないこと\|agy委譲モードと同じ" <<<"$p1codex"
+
+# --- 単独実行の経路（/koumei-analyze）も同じ要件を負うか ---
+assert "analyze スキル: 背景実行を指示する" grep -q "run_in_background" "$AN"
+assert "analyze スキル: 前景禁止と明記" grep -q "前景で実行してはならない" "$AN"
+assert "analyze スキル: ファイル存在だけで合格としない" \
+  grep -q "ファイルが在るというだけで合格としてはならない" "$AN"
+assert "analyze スキル: status を合否に使うなと明記" grep -q "合否に使ってはならない" "$AN"
+assert "analyze スキル: 消費ゼロで停止させる" grep -q "usage.total_tokens" "$AN"
+assert "analyze スキル: 委譲先に git 禁止を課す" grep -q "git 操作を一切行わないこと" "$AN"
+assert "analyze スキル: --add-dir を省略不可とする" grep -q -- '--add-dir "\$PWD"' "$AN"
+assert_not "旧: 資料を全文でプロンプトに展開する記述が残らない" grep -q "指示書の全文" "$AN"
+
+# --- TEAM.md: どこまで委譲できるか・何を基準に選ぶか ---
+assert "TEAM.md: 委譲対応は二フェーズだと明記" grep -q "委譲に対応しているフェーズは次の二つだけです" "$TMD"
+assert "TEAM.md: 委譲例の analyst が agy になっている" grep -q "^| analyst | agy |" "$TMD"
+assert "TEAM.md: 見分ける基準の節がある" grep -q "^#### 委譲の向き不向きを見分ける基準" "$TMD"
+assert "TEAM.md: 基準は出力量でなく入力量だと書く" grep -q "基準は出力量ではなく\*\*入力量\*\*である" "$TMD"
+assert "TEAM.md: 機械的に検証できるかを基準に挙げる" grep -q "機械的に検証できるか" "$TMD"
+assert "TEAM.md: 誤りが下流まで潜るかを基準に挙げる" grep -q "下流まで潜るか" "$TMD"
+assert "TEAM.md: 固定費を明記する" grep -q "14〜16k" "$TMD"
+
+# --- 据え置きの根拠が実測に置き換わっているか（旧: 印象論） ---
+assert "TEAM.md: devils-advocate の据え置きが実測根拠" grep -q "総計76KB" "$TMD"
+assert_not "旧: 品質ゲートは信頼性重視 という印象論が残らない" grep -q "品質ゲートは信頼性重視" "$TMD"
+assert_not "旧: ux-designer は創造的だから という理由が残らない" grep -q "創造的なUX判断が多い" "$TMD"
+assert "TEAM.md: ux-designer は判断保留として載る" grep -q "ux-designer は判断保留" "$TMD"
+assert "TEAM.md: 保留の解除条件が analyst の実測だと書く" grep -q "analyst の実測結果を見てから判じる" "$TMD"
+
+# --- ロール無効時に漏れないか ---
+make_project "$WORK_DIR/t22-noux" 's/^  # - analyst.*/  - analyst/'
+bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 (T22 noux)"
+assert_not "ux-designer 無効時は保留の記述が漏れない" grep -q "ux-designer は判断保留" .agents/TEAM.md
+assert "ux-designer 無効でも委譲の基準は残る" grep -q "委譲の向き不向きを見分ける基準" .agents/TEAM.md
+
+# --- 利用者向け文書の追随（README を忘れる事故が過去に四度） ---
+RM4="${REPO_DIR}/README.md"
+CF4="${REPO_DIR}/docs/configuration.md"
+assert "README: 分析フェーズも委譲対象だと載る" grep -q "分析フェーズ（Phase 1）" "$RM4"
+assert "README: 委譲できるのは二つだと載る" grep -q "委譲できるのは分析（Phase 1 / analyst）と実装" "$RM4"
+assert "README: 選ぶ基準が出力量でないと載る" grep -q "選ぶ基準は出力量ではなく" "$RM4"
+assert "configuration: 実物はロールで変わると載る" grep -q "「実物」はロールによって変わる" "$CF4"
+assert "configuration: 分析はファイル存在だけで合格としないと載る" \
+  grep -q "ファイルが在るというだけで合格としてはならない" "$CF4"
+assert "configuration: 委譲できるフェーズの節がある" grep -q "^#### 委譲できるフェーズと、向き不向き" "$CF4"
+assert "config 例: 委譲対応フェーズが注記される" \
+  grep -q "外部CLI委譲に対応しているのは analyst（Phase 1）と tech-lead-implement（Phase 5）" \
+  "${REPO_DIR}/koumei.config.example.yaml"
 
 # ------------------------------------------------------------
 echo ""
