@@ -429,12 +429,25 @@ Phase 2 と同様に devils-advocate サブエージェントを起動する。
 `.agents/TEAM.md` の tech-lead「実装モデル」を確認する。
 `agy` / `codex` などの外部CLIモデルが指定されている場合、または動的負荷分散を行う場合:
 
-1. **CLI 利用可否の確認**:
-   - `agy` が指定または `command -v agy` が成功する場合 → **agy委譲モード**
-   - `codex` が指定または `command -v codex` が成功する場合 → **Codex委譲モード**
-   - どちらも利用不可の場合 → **通常モード（Claudeサブエージェント）** へフォールバック
+1. **委譲するか否かは TEAM.md の指定で決まる。** `command -v` は**指定された CLI が使えるかを確かめるためだけ**に用いる。
 
-2. **途中停止・レートリミット時の自動引き継ぎ・フォールバック**:
+   - TEAM.md の実装モデルが `agy` → `command -v agy` を確認し、成功なら **agy委譲モード**
+   - TEAM.md の実装モデルが `codex` → `command -v codex` を確認し、成功なら **Codex委譲モード**
+   - 指定された CLI が使えない場合 → **通常モード（Claudeサブエージェント）** へフォールバックし、その旨を報告する
+
+   **CLI が PATH に在るというだけで委譲してはならない。**
+   `tech-lead-implement: "opus"` と指定されているのに `agy` が入っているから委譲する、
+   というのは設定の無効化である（[rules.md](rules.md)「ブランチ運用」と同じ理で、**config が正**）。
+
+2. **委譲先は{{COMMANDER_NAME}}と同じ作業ツリーで動かす。**
+   別の worktree で走らせてはならない。フェーズごとの commit は{{COMMANDER_NAME}}が
+   自分の作業ツリーで行うため、委譲先が別の場所で書けば**その実装は commit されず、
+   行き場を失う**（[rules.md](rules.md)「git 操作の排他」）。
+
+   隔離は worktree ではなく**ブランチとコミットが担う。** 既に専用ブランチの上に居り、
+   各フェーズで commit + push している以上、委譲先が何をしても git で戻せる。
+
+3. **途中停止・レートリミット時の自動引き継ぎ・フォールバック**:
    - 外部CLI実行中にクォータ上限（429 / Rate Limit / Quota Exceeded）やエラーが発生した場合:
      - {{COMMANDER_NAME}}のペルソナで報告: `「先鋒の兵站（クォータ）が尽きたようじゃ。直ちに第二陣へ交代させよ！」`
      - 作業途中の差分（`git status` / `git diff`）を確認し、フォールバック先のモデル（Claude サブエージェント）に「先行エージェントの作業途中の差分を引き継ぎ、不完全なら補正して実装を完遂せよ」と指示して自動継続する。
@@ -453,7 +466,7 @@ tech-lead をサブエージェントとして起動する（起動方法はCLI�
 
 {{#IF_CLI claude}}
 ### agy委譲モード
-Bash tool で `agy -p "{指示プロンプト}" --dangerously-skip-permissions` を実行する（worktree 内での実行を推奨）。
+Bash tool で `agy -p "{指示プロンプト}" --dangerously-skip-permissions` を実行する（**{{COMMANDER_NAME}}と同じ作業ツリーで実行する。** 別 worktree で走らせると実装が commit されない）。
 ※ 引数のエスケープ破損を防ぐため、プロンプトには成果物全文ではなくファイルパスを参照させる。
 
 **プロンプトに含める内容:**

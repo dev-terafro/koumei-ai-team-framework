@@ -18,8 +18,22 @@
 リポジトリルートで以下を実行し、以後の作業は全て worktree 内で行う:
 
 ```bash
-git worktree add ../{リポジトリ名}-task-{番号} -b feature/task-{番号}
+{{#IF_DEVELOP_BRANCH}}
+BASE={{GIT_DEVELOP_BRANCH}}   # 派生元。{{GIT_MAIN_BRANCH}} ではない
+{{/IF_DEVELOP_BRANCH}}
+{{#IF_NO_DEVELOP_BRANCH}}
+BASE={{GIT_MAIN_BRANCH}}
+{{/IF_NO_DEVELOP_BRANCH}}
+git fetch origin "$BASE"
+git worktree add ../{リポジトリ名}-task-{番号} -b {ブランチ名} "origin/$BASE"
 ```
+
+**ブランチ名は `{{GIT_BRANCH_PATTERN}}` に従って組み立てる**（占位子の埋め方は
+`{{SKILLS_DIR}}/{{SKILL_PREFIX}}-start/docs/phases.md`「Git 運用」参照）。
+確定した派生元・ブランチ名・PR先は、担当タスクの定義ファイルの `## ブランチ` に記録する。
+
+**派生元を省略してはならない。** 省けば worktree は現在の `HEAD` から切られ、
+どのブランチの上に立っているかが実行時の状況次第になる。
 
 `.agents/`・`.claude/` がリポジトリにコミットされていない場合、worktree に手動コピーすること。
 

@@ -88,7 +88,7 @@
 | grok | `grok -p "{プロンプト}"` | xAI Grok CLI（grok-4.5 等）。インストール済みの場合のみ |
 | gemini | `gemini "{プロンプト}"` | Google Gemini CLI |
 
-**サンドボックスの注意**: codex CLI の既定サンドボックスは読み取り専用。**ファイル書き込みを伴う委譲（分析成果物の保存・実装）では `-s workspace-write --full-auto` を追加する**こと（例: `codex exec -s workspace-write --full-auto "{プロンプト}"`）。agy CLI ではファイル書き込み時に `--dangerously-skip-permissions` を付与する（worktree 内での実行を推奨）。レビュー・セカンドオピニオンのように標準出力を呼び出し元が受け取って保存する用途では不要。
+**サンドボックスの注意**: codex CLI の既定サンドボックスは読み取り専用。**ファイル書き込みを伴う委譲（分析成果物の保存・実装）では `-s workspace-write --full-auto` を追加する**こと（例: `codex exec -s workspace-write --full-auto "{プロンプト}"`）。agy CLI ではファイル書き込み時に `--dangerously-skip-permissions` を付与する（**{{COMMANDER_NAME}}と同じ作業ツリーで実行すること。** 別 worktree で走らせると、その実装は commit されず行き場を失う）。レビュー・セカンドオピニオンのように標準出力を呼び出し元が受け取って保存する用途では不要。
 
 利用可否は CLI 本体の存在（例: `command -v codex`）で確認し、不可の場合は Claude にフォールバックして報告する。
 
@@ -237,7 +237,7 @@ Antigravity CLI 環境では、上記チーム構成表の「モデル」列に�
 
 【検証フェーズ】
 7. /{{SKILL_PREFIX}}-status              → 最終進捗確認
-8. 動作確認 → メインブランチへ PR
+8. 動作確認 → PR（向け先は koumei.config.yaml の設定に従う）
 
 ※ 迷ったら /{{SKILL_PREFIX}}-status で次のアクションを確認
 ```

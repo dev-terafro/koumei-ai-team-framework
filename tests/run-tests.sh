@@ -665,6 +665,55 @@ assert "無人運転: 照合の食い違いでも待避する" grep -q "タス�
 
 # ------------------------------------------------------------
 echo ""
+echo "[T18] git 記述の全体整合（古い前提の残留検知）"
+
+make_project "$WORK_DIR/t18"
+bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 (T18)"
+P=.claude/skills/koumei-start/docs/phases.md
+R=.claude/skills/koumei-start/docs/rules.md
+EH=.claude/skills/koumei-start/docs/error-handling.md
+TM=.agents/task-manager/CLAUDE.md
+S=.claude/skills/koumei-start/SKILL.md
+
+# --- PR先が「メインブランチ」で固定されていた古い記述 ---
+assert_not "指揮者の役割定義にメインブランチ固定のPRが残らない" grep -q "メインブランチにPR" .agents/koumei/CLAUDE.md
+assert_not "TEAM.md のフロー図にメインブランチ固定のPRが残らない" grep -q "メインブランチへ PR" .agents/TEAM.md
+assert "指揮者の役割定義が config を正とする" grep -q "既定のPR先ブランチへPR" .agents/koumei/CLAUDE.md
+
+# --- task-manager の worktree 作成（命名が config を無視し、派生元が暗黙だった） ---
+assert_not "worktree のブランチ名が決め打ちでない" grep -q -- "-b feature/task-{番号}" "$TM"
+assert "worktree の派生元を明示する" grep -q 'git worktree add .* "origin/\$BASE"' "$TM"
+assert "worktree の命名が branch_pattern に従う" grep -q "に従って組み立てる" "$TM"
+assert "派生元の省略を禁じる理由を書く" grep -q "省けば worktree は現在の" "$TM"
+
+# --- 外部CLI委譲: PATH に在るだけで委譲してはならない ---
+assert "委譲の可否は TEAM.md の指定で決まる" grep -q "委譲するか否かは TEAM.md の指定で決まる" "$P"
+assert "PATH 常駐だけでの委譲を禁じる" grep -q "PATH に在るというだけで委譲してはならない" "$P"
+assert_not "旧: command -v 成功だけで委譲する記述が残らない" grep -q "が指定または \`command -v" "$P"
+
+# --- 委譲先の作業ツリー（別 worktree だと commit されず迷子になる） ---
+assert "委譲先を同じ作業ツリーで動かす" grep -q "同じ作業ツリーで動かす" "$P"
+assert_not "worktree 内実行の推奨が残らない（phases）" grep -q "worktree 内での実行を推奨" "$P"
+assert_not "worktree 内実行の推奨が残らない（TEAM）" grep -q "worktree 内での実行を推奨" .agents/TEAM.md
+assert "隔離はブランチとコミットが担うと明記" grep -q "隔離は worktree ではなく" "$P"
+
+# --- 読み取り専用 git は禁じない（レビューが git diff を使うため） ---
+assert "読み取り専用の git を許すと明記" grep -q "読み取りは禁じない" "$R"
+assert "禁ずるのは状態を変える操作だと明記" grep -q "禁ずるのは\*\*状態を変える操作\*\*" "$R"
+
+# --- PR作成失敗の扱い（旧: 停止する → 新: 止めない） ---
+assert_not "旧: gh 固定の節見出しが残らない" grep -q "^## \`gh pr create\` 失敗" "$EH"
+assert "PR作成失敗でタスクを失敗扱いにしない" grep -q "タスクを失敗扱いにしてはならない" "$EH"
+assert_not "PR失敗で停止する古い指示が残らない" grep -q "ブランチ未プッシュ等の原因を案内して停止する" "$EH"
+assert "Bitbucket で自動作成しないのは失敗ではないと明記" grep -q "これは失敗ではない" "$EH"
+
+# --- 要件指示書 → タスク定義 への受け渡し（訊いて捨てる構図の解消） ---
+assert "Phase 0 で要件指示書のブランチ戦略を写させる" grep -q "その内容をタスク定義へ書き写す" "$S"
+assert "写さなければ確認の意味が消えると警告する" grep -q "要件指示書に書かれたまま放置してはならない" "$S"
+assert "argument-hint に --unattended がある" grep -q -- "--unattended" "$S"
+
+# ------------------------------------------------------------
+echo ""
 echo "=========================================="
 echo " 結果: PASS=$PASS FAIL=$FAIL"
 if [[ $FAIL -gt 0 ]]; then

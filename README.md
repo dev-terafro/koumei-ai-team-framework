@@ -21,7 +21,7 @@
 - **Git運用の明文化とホスト対応**: 派生元からの分岐・**フェーズ完了ごとの commit/push** を掟として定め、無人でも成果が失われない。PR は GitHub / Bitbucket を判別して作成（Bitbucket は PR作成URLを提示）
 - **STAGING確認チェックリスト**: Phase 7 で「人がステージングで確かめるべきこと」を、**書いた本人以外が読める形**で生成（期待する結果の空欄を禁止・回帰と未検証領域を分離・移植タスクでは移行元との突き合わせを必須化）
 - **Hooks**: TEAM.md 保護・操作ログ・自動フォーマット・フェーズ完了通知（claude / antigravity 対応）
-- **クロスCLI・外部委譲**: Claude CLI から Antigravity（agy）や Codex へ実装フェーズを安全に委譲（worktree 隔離・レートリミット時の自動引き継ぎ・フォールバック機能付き）
+- **クロスCLI・外部委譲**: Claude CLI から Antigravity（agy）や Codex へ実装フェーズを安全に委譲（委譲の可否は config の指定が決める。隔離は作業ブランチとフェーズ毎のコミットが担う。レートリミット時の自動引き継ぎ・フォールバック付き）
 - **config 駆動の更新機構**: `--update` はスキーマ差分を検知し、必要なら `--reconfig` を案内
 - **マルチCLI対応**: `target_cli` で claude / codex / antigravity に展開（機能マトリクスは後述）
 
@@ -129,7 +129,7 @@ setup.sh --dry-run     # 実際にファイルを作成せずプレビュー
 - **`claude` (Claude Code)**: `Agent` ツールによる自律サブエージェント呼び出し。ロールごとに異なるモデル（Fable/Opus/Sonnet）を起動し、`.claude/settings.json` の Hooks で安全性を担保。
 - **`antigravity` (Antigravity / `agy`)**: `invoke_subagent` ツールによるサブエージェント起動。`TEAM.md` のモデル定義から `pro` / `flash` の階層を動的に解決。`Subagents` 配列によるネイティブ並列マルチタスクと `.agents/hooks.json` に対応。
 - **`codex` (Codex CLI)**: サブエージェントネストを持たないため、単一セッション内でロール定義（`AGENTS.md`）を順次読み替えながら直列実行。
-- **クロスCLI・ハイブリッド連携**: Claude CLI を司令塔（設計・オーケストレーション・レビュー）とし、最もトークンを消費する実装フェーズ（Phase 5）のみを `git worktree` 内で `agy`（Gemini）に委譲。レートリミット（429）検知時の自律引き継ぎ・フォールバックを完備。
+- **クロスCLI・ハイブリッド連携**: Claude CLI を司令塔（設計・オーケストレーション・レビュー）とし、最もトークンを消費する実装フェーズ（Phase 5）のみを `agy`（Gemini）に委譲（**指揮者と同じ作業ツリーの作業ブランチ上**で実行。隔離はブランチとフェーズ毎のコミットが担う）。レートリミット（429）検知時の自律引き継ぎ・フォールバックを完備。
 
 ## 成果物の配置（2層構成）
 
