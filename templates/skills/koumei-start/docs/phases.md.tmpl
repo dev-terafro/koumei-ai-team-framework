@@ -466,14 +466,72 @@ tech-lead をサブエージェントとして起動する（起動方法はCLI�
 
 {{#IF_CLI claude}}
 ### agy委譲モード
-Bash tool で `agy -p "{指示プロンプト}" --dangerously-skip-permissions` を実行する（**{{COMMANDER_NAME}}と同じ作業ツリーで実行する。** 別 worktree で走らせると実装が commit されない）。
+
+**必ず Bash tool の `run_in_background` で起動する。前景で実行してはならない。**
+前景の Bash は既定2分で打ち切られ、上限まで引き上げても10分が天井である。実装フェーズは
+それを超えるのが常であり、前景で回すと**必ず途中で殺され、フォールバックで Claude に落ちる**
+（＝委譲した意味が消える）。背景実行にこの制限は無い。
+
+```
+cd "$(git rev-parse --show-toplevel)" && mkdir -p .agents/logs && \
+agy -p "{指示プロンプト}" \
+    --dangerously-skip-permissions \
+    --add-dir "$PWD" \
+    --model gemini-3.7-flash-medium \
+    --print-timeout 30m \
+    --output-format json \
+    < /dev/null \
+    > .agents/logs/agy-task-{番号}.json 2>&1
+```
+
+**{{COMMANDER_NAME}}と同じ作業ツリーで実行する。** 別 worktree で走らせると実装が commit されない。
+オプションはいずれも省略不可（理由は `.agents/TEAM.md`「agy の三つの落とし穴」）。
 ※ 引数のエスケープ破損を防ぐため、プロンプトには成果物全文ではなくファイルパスを参照させる。
 
 **プロンプトに含める内容:**
 - 「あなたはテックリードです。.agents/tech-lead/CLAUDE.md の役割定義に従い、設計書 [.agents/tech-lead/deliverables/task-{番号}-design.md] および指示書 [.agents/tech-lead/instructions/task-{番号}.md] に基づいて実装を行ってください。ファイル修正とテスト実行を行い、git commit は行わないこと。」
 
+**待っている間、{{COMMANDER_NAME}}は作業ツリーに一切触れてはならない。**
+背景で委譲先が同じツリーを書いている。commit・編集・ブランチ操作のいずれも禁ずる
+（[rules.md](rules.md)「git 操作の排他」）。前景実行では自然に守られていたが、
+背景実行では「待つ間に他の作業をしてしまう」余地が生まれるため、ここで改めて禁ずる。
+
+**完了通知を受けたら、次の順で判定する:**
+
+1. **`git status --porcelain` の差分** ← 一次判定。実際に何が変わったかが唯一の事実
+2. **ビルド / Lint / テスト** ← 本当の合否はここでしか決まらない
+3. ログ（`.agents/logs/agy-task-{番号}.json`）← **失敗したときの原因分類にのみ使う**
+
+**ログの `status` と終了コードを合否の判定に使ってはならない。**
+実装が完全に成功していても `status: ERROR`、終了コード 0 が返ることがある。
+
+**失敗した場合の型と処置:**
+
+| ログの兆候 | 意味 | 処置 |
+|---|---|---|
+| `usage.total_tokens` が 0 | **一度も動いていない**（設定不備） | フォールバックせず**報告して停止** |
+| `invalid model selection` | モデルID誤り | 同上（**停止**） |
+| `not a valid artifact path` かつ差分ゼロ | `--add-dir` 漏れ | 同上（**停止**） |
+| `timeout waiting for response` かつ差分あり | 途中停止。部分成果はディスクに残る | `git diff` を引き継いでフォールバック続行 |
+| 差分あり・ビルド通過 | **正常**（`status: ERROR` でも） | 次フェーズへ |
+
+上三つ（設定不備）を**自動フォールバックで隠してはならない。** 隠すと「委譲したつもりで
+一度も委譲できていない」状態が延々と気づかれない。フォールバックはレートリミットと
+途中停止のためのものであって、設定ミスのためのものではない。
+
 ### Codex委譲モード
-Bash tool で `codex exec -s workspace-write --full-auto "{プロンプト}"` を実行する（コード書き込みがあるため workspace-write 必須。TEAM.md の呼び出し方法に `-m` があればそれに従う）。
+
+**agy委譲モードと同じく、必ず `run_in_background` で起動する**（前景の2分/10分制限を避けるため）。
+
+```
+cd "$(git rev-parse --show-toplevel)" && mkdir -p .agents/logs && \
+codex exec -s workspace-write --full-auto "{プロンプト}" \
+    < /dev/null \
+    > .agents/logs/codex-task-{番号}.log 2>&1
+```
+
+コード書き込みがあるため `workspace-write` 必須。TEAM.md の呼び出し方法に `-m` があればそれに従う。
+待機中の作業ツリー不可侵、および**差分とビルドで合否を判定する**という原則も agy委譲モードと同じ。
 
 **プロンプトに含める内容:**
 - `.agents/tech-lead/{{AGENT_INSTRUCTIONS_FILENAME}}` の役割定義
