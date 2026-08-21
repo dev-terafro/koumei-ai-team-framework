@@ -19,21 +19,34 @@ allowed-tools: Read Glob Grep Write Bash Edit
 /{{SKILL_PREFIX}}-start → ▶ /{{SKILL_PREFIX}}-analyze → /{{SKILL_PREFIX}}-design → /{{SKILL_PREFIX}}-review → /{{SKILL_PREFIX}}-implement
 ```
 
-## モデル委譲チェック
+## 外部CLI委譲チェック
 
-`.agents/TEAM.md` の「モデル委譲設定」テーブル（コメント外されたもの）を確認する。
-`analyst` が委譲先として設定されている場合:
+`.agents/TEAM.md` の analyst のモデル列と「モデル委譲設定」テーブルを確認する。
+**委譲するか否かは TEAM.md の指定で決まる。** CLI が PATH に在るというだけで委譲してはならない。
+指定された CLI が `command -v` で見つからない場合は通常手順へフォールバックし、その旨を報告する。
+
+`analyst` に外部CLI（`agy` / `codex`）が指定されている場合:
 
 1. 指示書（`.agents/analyst/instructions/` の最新）と役割定義（`.agents/analyst/{{AGENT_INSTRUCTIONS_FILENAME}}`）を読み込む
-2. 以下の内容を含むプロンプトを組み立てる:
-   - 役割定義の全文
-   - 指示書の全文
+2. 以下の内容を含むプロンプトを組み立てる。**引数のエスケープ破損を防ぐため、資料は全文ではなくファイルパスで参照させる**:
+   - 役割定義（**「分析品質基準」を含む**）のパス
+   - 指示書のパス
    - 「成果物を `.agents/analyst/deliverables/task-{番号}-analysis.md` に保存すること」
    - 「完了報告を `.agents/koumei/reports/task-{番号}-analyst-report.md` に保存すること」
    - 以下「手順」セクションの 3〜6 の内容
-3. Bash ツールで委譲先を実行する。呼び出し方法は TEAM.md の委譲設定テーブルに従う（codex の場合: `codex exec -s workspace-write --full-auto "{プロンプト}"`。成果物ファイルの書き込みがあるため workspace-write 必須）
-4. 実行完了後、成果物ファイルの存在を確認し、結果をユーザーに報告する
-5. 次のステップを案内して終了する
+   - **git 操作を一切行わないこと**（ブランチ操作・commit・push・PR作成）
+3. **Bash ツールの `run_in_background` で委譲先を実行する。前景で実行してはならない**（前景の Bash は既定2分・上限10分で打ち切られ、分析はそれを超えうる）。ログは `.agents/logs/` へ落とす（`mkdir -p .agents/logs` を自分で行う）。呼び出し方法は TEAM.md の「外部CLIモデル定義」に従う:
+   - agy: `--dangerously-skip-permissions` `--add-dir "$PWD"` `--model {TEAM.md の指定}` `--print-timeout 30m` `--output-format json` はいずれも省略不可
+   - codex: 成果物の書き込みがあるため `-s workspace-write --full-auto` 必須
+4. **待っている間、作業ツリーに触れない。** 背景で委譲先が同じツリーへ書いている
+5. 完了後、次の順で判定する。**ログの `status` と終了コードを合否に使ってはならない**（成功していても `status: ERROR` が返ることがある）:
+   1. 成果物ファイルの実在と本文サイズ（`wc -c`）
+   2. **分析品質基準の照合** — 実データ確認 / 仮説と事実の区別 / 既存実装の事前チェック / 影響範囲。**ファイルが在るというだけで合格としてはならない**。満たさなければ不足を指摘して一度だけ再実行させ、二度目も満たさなければ通常手順へフォールバックして報告する
+   3. ログ — 失敗時の原因分類にのみ使う。`usage.total_tokens` が 0 なら**一度も動いていない**（設定不備）。フォールバックで隠さず報告して停止する
+6. ログの `usage.total_tokens` を完了報告に1行記す（委譲が割に合っているかは両側の数字を並べないと判じられない）
+7. 次のステップを案内して終了する
+
+失敗の型と処置の詳細は `{{SKILLS_DIR}}/{{SKILL_PREFIX}}-start/docs/phases.md`「Phase 1 / agy委譲モード」を正本とする。
 
 委譲設定がない場合は、以下の通常手順で実行する。
 

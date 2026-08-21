@@ -50,6 +50,8 @@ commander:
 # - tech-lead-design: 設計ミスは実装で増幅される → 最上位モデル
 # - inquisitor: 「何を問わなかったか」は誰にも検知できない。問いの質が下流の設計精度を決める → 最上位モデル
 # - tech-lead-implement: トークン量が多い → 1段下のモデル（または agy などの外部CLI委譲）
+# 外部CLI委譲に対応しているのは analyst（Phase 1）と tech-lead-implement（Phase 5）の二つ。
+# 選ぶ基準は出力量ではなく入力量（agy は1呼び出しあたり14〜16k の固定費を持つ）。詳細は docs/configuration.md
 # - scribe: 要約・選別は理解を要し、取りこぼしは下流で検知できない → 中位モデル（haiku は重い資料の書き出しで停止する実測あり）
 # 指定可能な値: haiku / sonnet / opus / fable（またはフルモデルID）、TEAM.md の外部CLIモデル定義に登録した名前（agy / codex 等）
 models:
