@@ -714,6 +714,39 @@ assert "argument-hint に --unattended がある" grep -q -- "--unattended" "$S"
 
 # ------------------------------------------------------------
 echo ""
+echo "[T19] 利用者向け文書の追随（機能を入れて README を忘れる事故の回帰）"
+
+# テンプレートに掟を刻んでも、README/configuration.md が古いままだと
+# 「決めたつもりが伝わっていない」状態になる。実際に二度取り残した
+RM="${REPO_DIR}/README.md"
+CF="${REPO_DIR}/docs/configuration.md"
+
+# 無人運転
+assert "README: --unattended が載る" grep -q -- "--unattended" "$RM"
+assert "README: 待避（PARK）の概念が載る" grep -q "待避（PARK）" "$RM"
+assert "README: 戦況表が載る" grep -q "戦況表" "$RM"
+# Git 運用・PR
+assert "README: フェーズ毎の commit/push が載る" grep -q "フェーズ完了ごとの commit/push" "$RM"
+assert "README: Bitbucket 対応が載る" grep -q "Bitbucket" "$RM"
+assert "README: STAGING確認チェックリストが載る" grep -q "STAGING確認チェックリスト" "$RM"
+# git 操作の排他・ブランチ運用
+assert "README: git 操作の排他が載る" grep -q "git 操作の排他" "$RM"
+assert "README: 粒度（一作業ツリーに一人）が載る" grep -q "一つの作業ツリーにつき、git を触る者は一人" "$RM"
+assert "README: 読み取りは禁じない旨が載る" grep -q "読み取りの \`git diff\` 等は禁じない" "$RM"
+assert "README: ブランチ運用の一元化が載る" grep -q "ブランチ運用の一元化" "$RM"
+assert "README: 決定をタスク定義に記録する旨が載る" grep -q "タスク定義の \`## ブランチ\` に記録する" "$RM"
+# 課題管理連携
+assert "README: 機能マトリクスに無人運転がある" grep -q "無人運転（--unattended" "$RM"
+assert "README: 機能マトリクスに ticket 連携がある" grep -q "課題管理システム連携（ticket" "$RM"
+# 設定文書
+assert "configuration: ticket セクションがある" grep -q "^## ticket（課題管理システム連携・任意）" "$CF"
+assert "configuration: queue のブロックスカラー必須を警告する" grep -q "ブロック形式で書く" "$CF"
+assert "configuration: status_ を入れ子にするなと警告する" grep -q "入れ子（\`status:\` の下）にしてはならない" "$CF"
+assert "configuration: branch_pattern の {type} が載る" grep -q "{type}" "$CF"
+assert "configuration: main/develop が PR先にも配線済みと明記" grep -q "PRの向け先" "$CF"
+
+# ------------------------------------------------------------
+echo ""
 echo "=========================================="
 echo " 結果: PASS=$PASS FAIL=$FAIL"
 if [[ $FAIL -gt 0 ]]; then
