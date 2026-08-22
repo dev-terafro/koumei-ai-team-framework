@@ -1043,10 +1043,10 @@ PH=.claude/skills/koumei-start/docs/phases.md
 AN=.claude/skills/koumei-analyze/SKILL.md
 TMD=.agents/TEAM.md
 
-guard=$(awk '/^## フェーズ完了時の検査/,/^## Git 運用/' "$PH")
+guard=$(awk '/^## フェーズを終える条件/,/^## Git 運用/' "$PH")
 
 # --- 台帳の実体 ---
-assert "台帳の節が立つ" grep -q "^### 実行諸元の記録（フェーズ台帳）" <<<"$guard"
+assert "台帳の節が立つ" grep -q "^### 2\. 実行諸元の記録（フェーズ台帳）" <<<"$guard"
 assert "台帳のパスが定まっている" grep -q "task-{番号}-execution.md" <<<"$guard"
 assert "台帳に実行諸元の列がある" grep -q "実行諸元" <<<"$guard"
 assert "台帳に委譲先の消費の列がある" grep -q "委譲先の消費" <<<"$guard"
@@ -1067,8 +1067,8 @@ assert "サブエージェントは自分のモデルを知らないと明記" \
   grep -q "自分がどのモデルで起動されたかを確実には知らない" <<<"$guard"
 
 # --- 置き場所（独立指示は落ちる。#30 の実測で実際に落ちた） ---
-assert "サイズ検査に相乗りさせるのが意図的だと明記" grep -q "相乗りさせるのは意図的である" <<<"$guard"
-assert "独立指示は落ちると明記" grep -q "という形の指示は実行時に落ちる" <<<"$guard"
+assert "二度落ちた事実を残す" grep -q "この記録は二度落ちている" <<<"$guard"
+assert "置き場所を移しても落ちたと明記" grep -q "置き場所を移しても落ちた" <<<"$guard"
 assert "台帳も絶対パスで追記させる" grep -q "リポジトリルートからの絶対パス" <<<"$guard"
 
 # --- 記録先の一本化（二箇所あると食い違う） ---
@@ -1082,7 +1082,34 @@ assert "analyze スキルも台帳を指す" grep -q "task-{番号}-execution.md
 make_project "$WORK_DIR/t23-min"
 bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 (T23 min)"
 assert "最小ロールでも台帳の節は残る" \
-  grep -q "^### 実行諸元の記録（フェーズ台帳）" .claude/skills/koumei-start/docs/phases.md
+  grep -q "^### 2\. 実行諸元の記録（フェーズ台帳）" .claude/skills/koumei-start/docs/phases.md
+
+# --- フェーズを終える条件（issue #43: 記録が落ちるのを人に見せる） ---
+make_project "$WORK_DIR/t23-close"
+bash "$SETUP" > setup.log 2>&1 || ng "setup.sh 実行 (T23 close)"
+PHC=.claude/skills/koumei-start/docs/phases.md
+gc=$(awk '/^## フェーズを終える条件/,/^## Git 運用/' "$PHC")
+
+assert "終える条件の節が立つ" grep -q "^## フェーズを終える条件（ガードレール）" "$PHC"
+assert "三つ揃って完了だと明記" grep -q "三つを終えて初めて、そのフェーズは完了である" <<<"$gc"
+assert "欠けたまま進むなと明記" grep -q "一つでも欠けたまま次へ進んではならない" <<<"$gc"
+assert "条件1がサイズ検査" grep -q "^### 1\. 成果物のサイズ検査" <<<"$gc"
+assert "条件2が台帳" grep -q "^### 2\. 実行諸元の記録（フェーズ台帳）" <<<"$gc"
+assert "条件3が commit + push だと示す" grep -q "commit + push" <<<"$gc"
+
+# 転記（落ちたことを人に見せる仕掛け）
+assert "完了報告へ台帳の行を添えさせる" grep -q "^#### 完了報告には台帳の行を添える" <<<"$gc"
+assert "報告は台帳から作ると明記" grep -q "報告は台帳から作る" <<<"$gc"
+assert "台帳が無ければ添える行が無いと説く" grep -q "添える行が無い" <<<"$gc"
+assert "人に見せるための仕掛けだと明記" grep -q "人に見せるための仕掛け" <<<"$gc"
+assert "書けなかったことも報告させる" grep -q "書けなかったことを報告に明記する" <<<"$gc"
+
+# なぜ効くのか（実害の有無が守られる/守られないを分ける）
+assert "差は文言の強さでないと明記" grep -q "文言の強さではなく" <<<"$gc"
+assert "飛ばしたときの実害が分岐点だと明記" grep -q "飛ばしたときに実害が出るか" <<<"$gc"
+assert "commit が守られる理由を対比で示す" grep -q "次フェーズの差分が混ざり、作業が壊れる" <<<"$gc"
+assert "台帳は何も起きないから落ちたと対比" grep -q "その場では何も起きない" <<<"$gc"
+assert_not "旧: ここに置けば落ちない という否定された主張が残らない" grep -q "ここに置けば落ちない" "$PHC"
 
 # ------------------------------------------------------------
 echo ""
